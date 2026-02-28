@@ -1,0 +1,7 @@
+pyyaml
+rich
+streamlit
+streamlit-autorefresh
+pandas
+plotly
+requests

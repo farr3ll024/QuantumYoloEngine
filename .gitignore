@@ -1,0 +1,91 @@
+# .gitignore (QuantumYoloEngine)
+
+# -----------------------------
+# python bytecode / caches
+# -----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+
+# -----------------------------
+# virtual environments
+# -----------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# -----------------------------
+# ide/editor
+# -----------------------------
+.idea/
+.vscode/
+*.iml
+
+# macos
+.DS_Store
+
+# -----------------------------
+# logs
+# -----------------------------
+*.log
+
+# -----------------------------
+# local sqlite runtime db
+# -----------------------------
+paper_trader.db
+paper_trader.db-*
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+
+# -----------------------------
+# streamlit (never commit secrets)
+# -----------------------------
+.streamlit/secrets.toml
+
+# (optional) if you want these committed, remove these ignores
+.streamlit/config.toml
+.streamlit/cache/
+.streamlit/.cache/
+.streamlit/logs/
+
+# -----------------------------
+# env / secrets
+# -----------------------------
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# -----------------------------
+# generated data
+# -----------------------------
+history.csv
+history_*.csv
+*.parquet
+*.feather
+
+# keep a small committed sample if you want:
+!history.sample.csv
+
+# -----------------------------
+# build / packaging
+# -----------------------------
+build/
+dist/
+*.egg-info/
+
+# -----------------------------
+# misc / reports
+# -----------------------------
+coverage.xml
+htmlcov/

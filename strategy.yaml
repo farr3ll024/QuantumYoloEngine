@@ -1,0 +1,54 @@
+bankroll_usd: 500.0
+quote_currency: USD
+
+assets:
+  BTC-USD:
+    enabled: true
+    allocation_usd: 325.0
+
+    # wider stop so normal volatility doesn't immediately stop you
+    stop_price: 101500.0  # ~-9.8% from 112,500
+
+    take_profit:
+      tp1_price: 116000.0   # ~+3.1%
+      tp1_fraction: 0.50
+      tp2_price: 119500.0   # ~+6.2%
+      tp2_fraction: 0.50
+
+    # tighter ladder around the current regime to trigger entries
+    entries:
+      - id: btc_e1
+        price: 112500.0
+        quote_size_usd: 75.0
+      - id: btc_e2
+        price: 110250.0     # -2%
+        quote_size_usd: 85.0
+      - id: btc_e3
+        price: 108000.0     # -4%
+        quote_size_usd: 85.0
+      - id: btc_e4
+        price: 105750.0     # -6%
+        quote_size_usd: 80.0
+
+  ETH-USD:
+    enabled: true
+    allocation_usd: 175.0
+
+    stop_price: 4050.0      # ~-10% from 4500
+
+    take_profit:
+      tp1_price: 4640.0     # ~+3.1%
+      tp1_fraction: 0.50
+      tp2_price: 4775.0     # ~+6.1%
+      tp2_fraction: 0.50
+
+    entries:
+      - id: eth_e1
+        price: 4500.0
+        quote_size_usd: 40.0
+      - id: eth_e2
+        price: 4410.0       # -2%
+        quote_size_usd: 60.0
+      - id: eth_e3
+        price: 4320.0       # -4%
+        quote_size_usd: 75.0
