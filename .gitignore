@@ -53,6 +53,8 @@ runtime/db/
 # -----------------------------
 # streamlit (never commit secrets)
 # -----------------------------
+.streamlit/
+!.streamlit/config.toml
 .streamlit/secrets.toml
 
 # streamlit caches / logs (keep config committed)
