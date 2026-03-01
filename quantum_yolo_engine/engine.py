@@ -11,16 +11,21 @@ from .store import StateStore
 
 class PaperTrader:
     def __init__(
-        self,
-        store: StateStore,
-        strategies: Dict[str, AssetStrategy],
-        logger: logging.Logger,
-        move_stop_to_breakeven_after_tp1: bool = True,
+            self,
+            store: StateStore,
+            strategies: Dict[str, AssetStrategy],
+            logger: logging.Logger,
+            move_stop_to_breakeven_after_tp1: bool = True,
     ):
         self.store = store
         self.strategies = strategies
         self.logger = logger
         self.move_stop_to_breakeven_after_tp1 = move_stop_to_breakeven_after_tp1
+
+        # prevents "enter and stop out on the same tick" behavior. this can happen
+        # in csv replay or tight stops when the stop condition is evaluated on the
+        # same timestamp as the entry fill.
+        self._last_entry_ts_by_product: Dict[str, str] = {}
 
     def bootstrap(self) -> None:
         now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
@@ -55,7 +60,8 @@ class PaperTrader:
                             base_size=None,
                             ts_iso=now_iso,
                         )
-                    self.store.log_event("info", "seed_entries", "seeded entry ladder orders", product_id, ts_iso=now_iso)
+                    self.store.log_event("info", "seed_entries", "seeded entry ladder orders", product_id,
+                                         ts_iso=now_iso)
                     self.logger.info("%s seeded %s entry orders", product_id, len(strat.entries))
 
     def on_price_tick(self, ts: dt.datetime, prices: PriceSnapshot) -> None:
@@ -119,6 +125,36 @@ class PaperTrader:
                 pos.avg_entry = new_avg
                 pos.invested_quote += quote_size
                 pos.state = "active"
+
+                # guard rails: for longs, stop must be below the current average entry.
+                # if strategy config results in stop >= entry, it can instantly trigger.
+                if float(strat.stop_price) >= float(new_avg):
+                    original_stop = float(strat.stop_price)
+                    adjusted_stop = round(float(new_avg) * 0.995, 2)
+                    strat.stop_price = adjusted_stop
+                    self.store.log_event(
+                        "warn",
+                        "stop_adjusted",
+                        f"adjusted stop from {original_stop:.2f} to {adjusted_stop:.2f} (stop must be below avg entry)",
+                        strat.product_id,
+                        payload={
+                            "original_stop": original_stop,
+                            "adjusted_stop": adjusted_stop,
+                            "avg_entry": float(new_avg),
+                            "fill_price": float(fill_price),
+                        },
+                        ts_iso=ts_iso,
+                    )
+                    self.logger.warning(
+                        "%s stop adjusted | original=%.2f | adjusted=%.2f | avg=%.2f",
+                        strat.product_id,
+                        original_stop,
+                        adjusted_stop,
+                        float(new_avg),
+                    )
+
+                # record entry tick so stop cannot immediately fire on the same timestamp
+                self._last_entry_ts_by_product[strat.product_id] = ts_iso
 
                 self.store.mark_order_filled(order["order_id"], ts_iso=ts_iso)
                 self.store.upsert_position(pos, ts_iso=ts_iso)
@@ -190,6 +226,10 @@ class PaperTrader:
     def _fill_stop_if_hit(self, strat: AssetStrategy, market_price: float, ts_iso: str) -> None:
         pos = self.store.get_position(strat.product_id)
         if pos is None or not pos.has_position or pos.stop_done:
+            return
+
+        # guard: do not allow the stop to fill on the same tick as an entry fill.
+        if self._last_entry_ts_by_product.get(strat.product_id) == ts_iso:
             return
         if market_price > strat.stop_price:
             return

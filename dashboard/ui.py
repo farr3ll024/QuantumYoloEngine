@@ -266,6 +266,40 @@ def _apply_asset_focus(df: pd.DataFrame, asset_focus: str) -> pd.DataFrame:
     return df[df["product_id"] == asset_focus]
 
 
+def _build_ohlc_from_ticks(prices: pd.DataFrame, product_id: str, interval: str) -> pd.DataFrame:
+    """build ohlc candles from tick data.
+
+    expected columns: ts (datetime), product_id (str), price (float)
+    returns: ts, open, high, low, close
+    """
+    if prices.empty:
+        return pd.DataFrame()
+
+    if "product_id" not in prices.columns:
+        return pd.DataFrame()
+
+    df = prices[prices["product_id"] == product_id].copy()
+    if df.empty:
+        return pd.DataFrame()
+
+    df = df.dropna(subset=["ts", "price"]).sort_values("ts")
+    df = df.set_index("ts")
+
+    rule_map = {
+        "1m": "1min",
+        "5m": "5min",
+        "15m": "15min",
+        "1h": "1H",
+        "4h": "4H",
+        "1d": "1D",
+    }
+    rule = rule_map.get(interval, "5min")
+
+    ohlc = df["price"].resample(rule).agg(["first", "max", "min", "last"]).dropna()
+    ohlc = ohlc.rename(columns={"first": "open", "max": "high", "min": "low", "last": "close"}).reset_index()
+    return ohlc
+
+
 def _apply_events_filters(
         events: pd.DataFrame,
         asset_focus: str,
@@ -311,13 +345,13 @@ def render_dev_tools(db_path: str) -> None:
             st.session_state.confirm_clear = False
 
         if not st.session_state.confirm_clear:
-            if st.button("clear all data", type="primary", use_container_width=True):
+            if st.button("clear all data", type="primary", width="stretch"):
                 st.session_state.confirm_clear = True
                 st.warning("click again to confirm clearing all data.")
         else:
             col_a, col_b = st.columns(2)
             with col_a:
-                if st.button("confirm clear", type="primary", use_container_width=True):
+                if st.button("confirm clear", type="primary", width="stretch"):
                     try:
                         clear_all_data(db_path)
                         load_price_ticks.clear()
@@ -332,7 +366,7 @@ def render_dev_tools(db_path: str) -> None:
                         st.error("failed to clear data")
                         st.exception(ex)
             with col_b:
-                if st.button("cancel", use_container_width=True):
+                if st.button("cancel", width="stretch"):
                     st.session_state.confirm_clear = False
 
 
@@ -472,6 +506,8 @@ def _render_price_panel(
         asset_focus: str,
         last_n_ticks: int,
         show_trade_overlay: bool,
+        chart_type: str,
+        candle_interval: str,
 ) -> None:
     st.subheader("price chart")
 
@@ -486,12 +522,35 @@ def _render_price_panel(
 
     df = _apply_asset_focus(df, asset_focus)
 
-    fig = plotly_express.line(df, x="ts", y="price", color="product_id")
-    fig.update_layout(height=420, legend_title_text="")
+    if chart_type == "candlestick":
+        if asset_focus == "all":
+            st.info("candlestick view requires an asset focus (BTC-USD or ETH-USD).")
+            return
+
+        candles = _build_ohlc_from_ticks(prices=df, product_id=asset_focus, interval=candle_interval)
+        if candles.empty:
+            st.info("not enough ticks to build candles yet.")
+            return
+
+        fig = go.Figure(
+            data=[
+                go.Candlestick(
+                    x=candles["ts"],
+                    open=candles["open"],
+                    high=candles["high"],
+                    low=candles["low"],
+                    close=candles["close"],
+                    name=asset_focus,
+                )
+            ]
+        )
+        fig.update_layout(height=420, legend_title_text="")
+    else:
+        fig = plotly_express.line(df, x="ts", y="price", color="product_id")
+        fig.update_layout(height=420, legend_title_text="")
 
     if show_trade_overlay and not events_for_overlay.empty:
-        markers = _build_trade_event_markers(prices=df, events=events_for_overlay, asset_focus=asset_focus,
-                                             max_markers=500)
+        markers = _build_trade_event_markers(prices=df, events=events_for_overlay, asset_focus=asset_focus, max_markers=500)
         if not markers.empty:
             for event_type in sorted(markers["event_type"].unique().tolist()):
                 m = markers[markers["event_type"] == event_type]
@@ -640,10 +699,10 @@ def _render_history_tab(history_csv_path: str) -> None:
         left, right = st.columns(2)
         with left:
             st.caption("head")
-            st.dataframe(head, use_container_width=True, height=320)
+            st.dataframe(head, width="stretch", height=320)
         with right:
             st.caption("tail")
-            st.dataframe(tail, use_container_width=True, height=320)
+            st.dataframe(tail, width="stretch", height=320)
 
     st.divider()
     st.subheader("regenerate history")
@@ -717,6 +776,8 @@ def _frag_overview(
         asset_focus: str,
         last_n_ticks: int,
         show_trade_overlay: bool,
+        chart_type: str,
+        candle_interval: str,
         table_density: str,
         event_limit: int,
         show_only_signal_events: bool,
@@ -747,6 +808,8 @@ def _frag_overview(
                 asset_focus=asset_focus,
                 last_n_ticks=last_n_ticks,
                 show_trade_overlay=show_trade_overlay,
+                chart_type=chart_type,
+                candle_interval=candle_interval,
             )
         with st.container(border=True):
             _render_equity_panel(equity=equity)
@@ -815,7 +878,7 @@ def _render_engine_panel(history_csv_path: str) -> None:
     if status.get("running"):
         st.sidebar.success(f"running (pid {status['pid']})")
         st.sidebar.caption(f"started: {status['started_at_utc']}")
-        if st.sidebar.button("stop engine", type="primary", use_container_width=True):
+        if st.sidebar.button("stop engine", type="primary", width="stretch"):
             res = stop_engine()
             if res.get("ok"):
                 st.sidebar.success(res.get("message", "stopped"))
@@ -854,7 +917,7 @@ def _render_engine_panel(history_csv_path: str) -> None:
 
         st.sidebar.code(" ".join(["python", "paper_trader.py", *args]), language="bash")
 
-        if st.sidebar.button("start engine", type="primary", use_container_width=True):
+        if st.sidebar.button("start engine", type="primary", width="stretch"):
             res = start_engine(args)
             if res.get("ok"):
                 st.sidebar.success(f"started (pid {res['pid']})")
@@ -900,6 +963,19 @@ def run_app() -> None:
 
     event_limit = st.sidebar.slider("events to load", min_value=50, max_value=5000, value=500, step=50)
     asset_focus = st.sidebar.selectbox("asset focus", options=["all", "BTC-USD", "ETH-USD"], index=0)
+
+    chart_type = st.sidebar.selectbox(
+        "chart type",
+        options=["line", "candlestick"],
+        index=0,
+        help="candlestick aggregates tick prices into OHLC candles",
+    )
+    candle_interval = st.sidebar.selectbox(
+        "candle interval",
+        options=["1m", "5m", "15m", "1h", "4h", "1d"],
+        index=1,
+        disabled=(chart_type != "candlestick"),
+    )
 
     last_n_ticks = st.sidebar.slider(
         "chart window (unique ticks)",
@@ -986,6 +1062,8 @@ def run_app() -> None:
             asset_focus=asset_focus,
             last_n_ticks=last_n_ticks,
             show_trade_overlay=show_trade_overlay,
+            chart_type=chart_type,
+            candle_interval=candle_interval,
             table_density=table_density,
             event_limit=event_limit,
             show_only_signal_events=show_only_signal_events,

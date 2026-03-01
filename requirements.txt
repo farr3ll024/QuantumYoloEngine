@@ -1,6 +1,6 @@
 pyyaml
 rich
-streamlit
+streamlit>=1.28.0
 streamlit-autorefresh
 streamlit-plotly-events
 pandas
