@@ -25,78 +25,109 @@ from .theme import THEME
 
 DEFAULT_DB_PATH = Path("runtime/db/paper_trader.db")
 
-# trade-related event types we can overlay on the chart
 SIGNAL_EVENT_TYPES: Set[str] = {"entry_filled", "tp1_filled", "tp2_filled", "stop_filled", "stop_moved"}
 
-# plotly config (streamlit wants this passed via `config=...`, not kwargs)
 PLOTLY_CONFIG = {
-    "displayModeBar": True,  # keep toolbar available
+    "displayModeBar": True,
     "scrollZoom": True,
     "responsive": True,
 }
 
-# event marker colors (dark theme friendly)
 EVENT_COLORS: Dict[str, str] = {
     "entry_filled": THEME.success,
-    "tp1_filled": THEME.primary,
-    "tp2_filled": THEME.purple,
+    "tp1_filled": THEME.blue,
+    "tp2_filled": THEME.primary,
     "stop_filled": THEME.danger,
     "stop_moved": THEME.warn,
 }
 
-# -----------------------------
-# fragments support (streamlit >= 1.33-ish)
-# -----------------------------
 _HAS_FRAGMENTS = hasattr(st, "fragment")
 if _HAS_FRAGMENTS:
     fragment = st.fragment  # type: ignore[attr-defined]
 else:
 
     def fragment(*_args, **_kwargs):  # type: ignore[no-redef]
-        # fallback decorator: run function normally
         def deco(fn):
             return fn
 
         return deco
 
 
-# -----------------------------
-# global styling
-# -----------------------------
 def _inject_global_css() -> None:
     st.markdown(
         f"""
         <style>
-          /* layout */
-          .block-container {{
-            padding-top: 1.2rem;
-            padding-bottom: 2.2rem;
-            max-width: 1400px;
+          /* force the entire app background to be purple */
+          html, body, [data-testid="stAppViewContainer"], [data-testid="stAppViewContainer"] > .main {{
+            background: {THEME.bg} !important;
           }}
 
-          /* sidebar spacing */
+          /* top header / toolbar */
+          header[data-testid="stHeader"] {{
+            background: {THEME.bg} !important;
+            border-bottom: 1px solid rgba(167,139,250,0.12) !important;
+          }}
+          [data-testid="stToolbar"] {{
+            background: {THEME.bg} !important;
+          }}
+          [data-testid="stDecoration"] {{
+            background: {THEME.bg} !important;
+          }}
+
+          /* sidebar background to match */
           section[data-testid="stSidebar"] > div {{
-            padding-top: 1rem;
+            background: {THEME.panel} !important;
           }}
 
-          /* typography */
+          /* page width + spacing (more top padding so title doesn't crowd header) */
+          .block-container {{
+            padding-top: 2.0rem;     /* increased from ~1.15rem */
+            padding-bottom: 2.25rem;
+            max-width: 1440px;
+          }}
+
+          /* typography hierarchy */
           h1, h2, h3 {{
             letter-spacing: -0.02em;
           }}
-
-          /* polish for st.container(border=True) */
-          div[data-testid="stVerticalBlockBorderWrapper"] {{
-            border: 1px solid {THEME.border} !important;
-            border-radius: 16px !important;
-            background: linear-gradient(180deg, {THEME.panel} 0%, {THEME.panel2} 100%) !important;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.25) !important;
+          h1 {{
+            margin-bottom: 0.15rem;
           }}
 
-          /* tabs */
+          /* premium cards: applies to st.container(border=True) */
+          div[data-testid="stVerticalBlockBorderWrapper"] {{
+            border: 1px solid {THEME.border} !important;
+            border-radius: 18px !important;
+            background:
+              radial-gradient(1200px 600px at 20% 0%, rgba(167,139,250,0.16) 0%, rgba(0,0,0,0) 60%),
+              linear-gradient(180deg, {THEME.panel} 0%, {THEME.panel2} 100%) !important;
+            box-shadow:
+              0 18px 45px rgba(0,0,0,0.38),
+              0 0 0 1px rgba(0,0,0,0.18) inset !important;
+          }}
+
+          /* make separators calmer */
+          hr {{
+            border-color: rgba(167,139,250,0.12) !important;
+          }}
+
+          /* tabs: clean, no pill borders */
           button[role="tab"] {{
-            border-radius: 12px !important;
-            padding: 0.35rem 0.9rem !important;
+            border-radius: 10px !important;
+            padding: 0.30rem 0.80rem !important;
             margin-right: 0.25rem !important;
+          }}
+          button[role="tab"][aria-selected="true"] {{
+            border: none !important;
+            box-shadow: none !important;
+          }}
+          button[role="tab"][aria-selected="true"]::after {{
+            content: "";
+            display: block;
+            height: 3px;
+            border-radius: 999px;
+            margin-top: 6px;
+            background: rgba(167,139,250,0.88);
           }}
 
           /* dataframe/data_editor wrapper */
@@ -106,7 +137,7 @@ def _inject_global_css() -> None:
             border: 1px solid {THEME.border};
           }}
 
-          /* small muted helper */
+          /* helper text style */
           .qye-muted {{
             color: {THEME.text_muted};
             font-weight: 600;
@@ -117,9 +148,6 @@ def _inject_global_css() -> None:
     )
 
 
-# -----------------------------
-# path helpers
-# -----------------------------
 def _ensure_parent_dir(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -130,9 +158,6 @@ def _normalize_db_path(value: str) -> str:
     return str(p)
 
 
-# -----------------------------
-# format helpers
-# -----------------------------
 def money_col(label: str) -> st.column_config.NumberColumn:
     return st.column_config.NumberColumn(label=label, format="$%.2f")
 
@@ -175,20 +200,19 @@ def _colored_money(value: float, font_px: int = 20) -> str:
     color = _pnl_color(value)
     sign = "" if value < 0 else "+"
     return (
-        f"<span style='color:{color}; font-weight:800; font-size:{font_px}px; line-height:1.1'>"
+        f"<span style='color:{color}; font-weight:850; font-size:{font_px}px; line-height:1.05'>"
         f"{sign}{format_usd(value)}</span>"
     )
 
 
 def _label(text: str, font_px: int = 14) -> str:
     return (
-        f"<div style='font-size:{font_px}px; font-weight:700; color:{THEME.text_muted}; margin-bottom:4px'>"
+        f"<div style='font-size:{font_px}px; font-weight:750; color:{THEME.text_muted}; margin-bottom:4px'>"
         f"{text}</div>"
     )
 
 
 def _last_and_prev_price(prices: pd.DataFrame, product_id: str) -> Tuple[Optional[float], Optional[float]]:
-    # returns (last_price, prev_price) for product_id based on ts ordering.
     if prices.empty or "product_id" not in prices.columns:
         return None, None
 
@@ -218,11 +242,7 @@ def _delta_and_pct(last_px: Optional[float], prev_px: Optional[float]) -> Tuple[
     return d, pct
 
 
-# -----------------------------
-# plotly theme helpers
-# -----------------------------
 def _apply_dark_plotly_theme(fig: go.Figure) -> None:
-    # makes plotly charts dark without relying on global templates.
     fig.update_layout(
         paper_bgcolor=THEME.bg,
         plot_bgcolor=THEME.bg,
@@ -230,7 +250,7 @@ def _apply_dark_plotly_theme(fig: go.Figure) -> None:
         legend=dict(bgcolor="rgba(0,0,0,0)", borderwidth=0, font=dict(color=THEME.text_muted)),
         margin=dict(l=60, r=20, t=40, b=60),
         hovermode="x unified",
-        hoverlabel=dict(bgcolor="rgba(15,23,42,0.95)", font=dict(color="white")),
+        hoverlabel=dict(bgcolor="rgba(14,6,32,0.96)", font=dict(color="white")),
         colorway=list(THEME.colorway),
     )
 
@@ -250,9 +270,6 @@ def _apply_dark_plotly_theme(fig: go.Figure) -> None:
     )
 
 
-# -----------------------------
-# df filtering helpers
-# -----------------------------
 def _apply_asset_focus(df: pd.DataFrame, asset_focus: str) -> pd.DataFrame:
     if df.empty:
         return df
@@ -299,9 +316,6 @@ def _apply_events_filters(
     return df
 
 
-# -----------------------------
-# sidebar tools
-# -----------------------------
 def render_dev_tools(db_path: str) -> None:
     st.sidebar.divider()
     with st.sidebar.expander("developer tools", expanded=False):
@@ -338,11 +352,7 @@ def render_dev_tools(db_path: str) -> None:
                     st.session_state.confirm_clear = False
 
 
-# -----------------------------
-# trade overlay helpers
-# -----------------------------
 def _extract_price_from_message(msg: str) -> Optional[float]:
-    # matches "... at 108000.00" or "... at 4320"
     m = re.search(r"\bat\s+([0-9]+(?:\.[0-9]+)?)\b", msg or "")
     if not m:
         return None
@@ -368,7 +378,6 @@ def _build_trade_event_markers(
         asset_focus: str,
         max_markers: int = 500,
 ) -> pd.DataFrame:
-    # markers_df columns: ts, product_id, event_type, message, y
     if prices.empty or events.empty:
         return pd.DataFrame()
 
@@ -404,21 +413,13 @@ def _build_trade_event_markers(
             continue
 
         rows.append(
-            {
-                "ts": e_ts,
-                "product_id": product_id,
-                "event_type": str(r.get("event_type") or ""),
-                "message": msg,
-                "y": float(y),
-            }
+            {"ts": e_ts, "product_id": product_id, "event_type": str(r.get("event_type") or ""), "message": msg,
+             "y": float(y)}
         )
 
     return pd.DataFrame(rows)
 
 
-# -----------------------------
-# render panels
-# -----------------------------
 def _render_status_rail(
         prices: pd.DataFrame,
         positions: pd.DataFrame,
@@ -466,12 +467,12 @@ def _render_status_rail(
     with c6:
         st.markdown(_label("last tick age", font_px=15), unsafe_allow_html=True)
         st.markdown(
-            f"<div style='font-size:22px; font-weight:800; line-height:1.1'>{_format_seconds(age_s)}</div>",
+            f"<div style='font-size:22px; font-weight:850; line-height:1.05'>{_format_seconds(age_s)}</div>",
             unsafe_allow_html=True,
         )
 
     st.markdown(
-        f"<div style='margin-top:6px; font-size:16px; color:{THEME.text_muted}'>asset focus: <b>{asset_focus}</b></div>",
+        f"<div style='margin-top:6px; font-size:15px; color:{THEME.text_muted}'>asset focus: <b>{asset_focus}</b></div>",
         unsafe_allow_html=True,
     )
 
@@ -486,7 +487,7 @@ def _render_price_panel(
     st.subheader("price chart")
 
     if prices.empty:
-        st.info("no price ticks yet. run paper_trader first.")
+        st.info("no price ticks yet. run the trader first.")
         return
 
     df = prices.copy()
@@ -501,17 +502,12 @@ def _render_price_panel(
     fig.update_layout(height=420, legend_title_text="")
 
     if show_trade_overlay and not events_for_overlay.empty:
-        markers = _build_trade_event_markers(
-            prices=df,
-            events=events_for_overlay,
-            asset_focus=asset_focus,
-            max_markers=500,
-        )
+        markers = _build_trade_event_markers(df, events_for_overlay, asset_focus, max_markers=500)
 
         if not markers.empty:
             for event_type in sorted(markers["event_type"].unique().tolist()):
                 m = markers[markers["event_type"] == event_type]
-                color = EVENT_COLORS.get(event_type, "#cbd5e1")
+                color = EVENT_COLORS.get(event_type, THEME.slate)
                 fig.add_trace(
                     go.Scatter(
                         x=m["ts"],
@@ -519,10 +515,7 @@ def _render_price_panel(
                         mode="markers",
                         name=f"{event_type}",
                         hovertemplate="<b>%{text}</b><br>time=%{x}<br>y=%{y}<extra></extra>",
-                        text=m.apply(
-                            lambda r: f"{r['product_id']} • {r['event_type']} • {r['message']}",
-                            axis=1,
-                        ),
+                        text=m.apply(lambda r: f"{r['product_id']} • {r['event_type']} • {r['message']}", axis=1),
                         marker=dict(size=11, symbol="circle", color=color, line=dict(width=0)),
                     )
                 )
@@ -636,9 +629,6 @@ def _render_orders_panel(orders: pd.DataFrame) -> None:
     st.data_editor(orders, width="stretch", hide_index=True, disabled=True, height=620)
 
 
-# -----------------------------
-# fragments: live sections
-# -----------------------------
 def _run_every(refresh_sec: int) -> Optional[dt.timedelta]:
     if refresh_sec <= 0:
         return None
@@ -767,15 +757,14 @@ def _frag_diagnostics(db_path: str) -> None:
         )
 
 
-# -----------------------------
-# main
-# -----------------------------
 def run_app() -> None:
     st.set_page_config(page_title=APP_TITLE, layout="wide")
     _inject_global_css()
 
-    st.title(APP_TITLE)
-    st.caption("A dashboard to experiment with losing money while trading. Enjoy!")
+    # a more professional "hero header" section that gives breathing room
+    with st.container():
+        st.title(APP_TITLE)
+        st.caption("A dashboard to experiment with losing money while trading. Enjoy!")
 
     st.sidebar.subheader("controls")
 

@@ -5,11 +5,11 @@ from rich.theme import Theme
 
 RICH_THEME = Theme(
     {
-        "qye.primary": "#60a5fa",
+        "qye.primary": "#a78bfa",
+        "qye.primary2": "#c4b5fd",
         "qye.success": "#34d399",
         "qye.warn": "#fbbf24",
-        "qye.danger": "#f87171",
-        "qye.purple": "#a78bfa",
+        "qye.danger": "#fb7185",
         "qye.cyan": "#22d3ee",
         "qye.muted": "grey70",
     }

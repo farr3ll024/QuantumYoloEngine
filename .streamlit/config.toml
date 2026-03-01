@@ -2,9 +2,9 @@
 
 [theme]
 base = "dark"
-primaryColor = "#60a5fa"
-backgroundColor = "#0b1220"
-secondaryBackgroundColor = "#0f172a"
+primaryColor = "#a78bfa"              # purple primary
+backgroundColor = "#0b1020"           # slightly deeper than before
+secondaryBackgroundColor = "#101833"  # panel background
 textColor = "#e5e7eb"
 font = "sans serif"
 

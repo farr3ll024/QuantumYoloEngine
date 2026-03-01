@@ -71,7 +71,7 @@ def build_rich_dashboard(store: StateStore, prices: PriceSnapshot, tick_num: int
     group = Group(
         Panel(prices_table, border_style="qye.primary"),
         Panel(pos_table, border_style="qye.success"),
-        Panel(events_table, border_style="qye.purple"),
+        Panel(events_table, border_style="qye.primary2"),
     )
     return Panel(group, title="live dashboard", border_style="qye.muted")
 
