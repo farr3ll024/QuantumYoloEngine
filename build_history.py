@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-make_history_6mo.py (resilient hourly history + clear console output)
+build_history.py (resilient hourly history + clear console output)
 
 Generates history.csv for PaperTrader:
 ts,product_id,price

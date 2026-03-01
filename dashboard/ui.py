@@ -16,6 +16,7 @@ from .constants import APP_TITLE
 from .db import clear_all_data, load_events, load_orders, load_positions, load_price_ticks
 from .engine_control import get_status as get_engine_status
 from .engine_control import start_engine, stop_engine
+from .history_manager import load_history_preview, load_history_summary, regenerate_history
 from .metrics import (
     build_unrealized_pnl,
     compute_asset_pnl_rows,
@@ -60,7 +61,7 @@ def _inject_global_css() -> None:
     st.markdown(
         f"""
         <style>
-          /* force the entire app background to be purple */
+          /* app + page background */
           html, body, [data-testid="stAppViewContainer"], [data-testid="stAppViewContainer"] > .main {{
             background: {THEME.bg} !important;
           }}
@@ -77,19 +78,18 @@ def _inject_global_css() -> None:
             background: {THEME.bg} !important;
           }}
 
-          /* sidebar background to match */
+          /* sidebar background */
           section[data-testid="stSidebar"] > div {{
             background: {THEME.panel} !important;
           }}
 
-          /* page width + spacing */
+          /* layout spacing */
           .block-container {{
             padding-top: 2.0rem;
             padding-bottom: 2.25rem;
             max-width: 1440px;
           }}
 
-          /* typography hierarchy */
           h1, h2, h3 {{
             letter-spacing: -0.02em;
           }}
@@ -97,7 +97,7 @@ def _inject_global_css() -> None:
             margin-bottom: 0.15rem;
           }}
 
-          /* premium cards: applies to st.container(border=True) */
+          /* card styling for st.container(border=True) */
           div[data-testid="stVerticalBlockBorderWrapper"] {{
             border: none !important;
             border-radius: 18px !important;
@@ -109,12 +109,11 @@ def _inject_global_css() -> None:
               0 0 0 1px rgba(0,0,0,0.00) inset !important;
           }}
 
-          /* make separators calmer */
           hr {{
             border-color: rgba(167,139,250,0.10) !important;
           }}
 
-          /* tabs: clean, no pill borders */
+          /* tabs: clean */
           button[role="tab"] {{
             border-radius: 10px !important;
             padding: 0.30rem 0.80rem !important;
@@ -133,7 +132,7 @@ def _inject_global_css() -> None:
             background: rgba(167,139,250,0.88);
           }}
 
-          /* dataframe/data_editor wrapper */
+          /* dataframe wrapper */
           div[data-testid="stDataFrame"] {{
             border-radius: 14px;
             overflow: hidden;
@@ -149,7 +148,7 @@ def _ensure_parent_dir(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def _normalize_db_path(value: str) -> str:
+def _normalize_path(value: str) -> str:
     p = Path(value).expanduser()
     _ensure_parent_dir(p)
     return str(p)
@@ -218,21 +217,15 @@ def _last_and_prev_price(prices: pd.DataFrame, product_id: str) -> Tuple[Optiona
         return None, None
 
     df = df.sort_values("ts")
-    last_row = df.iloc[-1]
-    last_px = float(last_row["price"]) if pd.notna(last_row["price"]) else None
-
+    last_px = float(df.iloc[-1]["price"]) if pd.notna(df.iloc[-1]["price"]) else None
     if len(df) < 2:
         return last_px, None
-
-    prev_row = df.iloc[-2]
-    prev_px = float(prev_row["price"]) if pd.notna(prev_row["price"]) else None
+    prev_px = float(df.iloc[-2]["price"]) if pd.notna(df.iloc[-2]["price"]) else None
     return last_px, prev_px
 
 
 def _delta_and_pct(last_px: Optional[float], prev_px: Optional[float]) -> Tuple[Optional[float], Optional[float]]:
-    if last_px is None or prev_px is None:
-        return None, None
-    if prev_px == 0:
+    if last_px is None or prev_px is None or prev_px == 0:
         return None, None
     d = last_px - prev_px
     pct = (d / prev_px) * 100.0
@@ -268,11 +261,7 @@ def _apply_dark_plotly_theme(fig: go.Figure) -> None:
 
 
 def _apply_asset_focus(df: pd.DataFrame, asset_focus: str) -> pd.DataFrame:
-    if df.empty:
-        return df
-    if asset_focus == "all":
-        return df
-    if "product_id" not in df.columns:
+    if df.empty or asset_focus == "all" or "product_id" not in df.columns:
         return df
     return df[df["product_id"] == asset_focus]
 
@@ -322,21 +311,19 @@ def render_dev_tools(db_path: str) -> None:
             st.session_state.confirm_clear = False
 
         if not st.session_state.confirm_clear:
-            if st.button("clear all data", type="primary", width="stretch"):
+            if st.button("clear all data", type="primary", use_container_width=True):
                 st.session_state.confirm_clear = True
                 st.warning("click again to confirm clearing all data.")
         else:
             col_a, col_b = st.columns(2)
             with col_a:
-                if st.button("confirm clear", type="primary", width="stretch"):
+                if st.button("confirm clear", type="primary", use_container_width=True):
                     try:
                         clear_all_data(db_path)
-
                         load_price_ticks.clear()
                         load_positions.clear()
                         load_orders.clear()
                         load_events.clear()
-
                         st.session_state.confirm_clear = False
                         st.success("cleared ✅")
                         st.rerun()
@@ -345,7 +332,7 @@ def render_dev_tools(db_path: str) -> None:
                         st.error("failed to clear data")
                         st.exception(ex)
             with col_b:
-                if st.button("cancel", width="stretch"):
+                if st.button("cancel", use_container_width=True):
                     st.session_state.confirm_clear = False
 
 
@@ -393,7 +380,7 @@ def _build_trade_event_markers(
 
     ev = ev.sort_values("ts", ascending=True).tail(max_markers)
 
-    rows = []
+    rows: list[dict[str, Any]] = []
     for _, r in ev.iterrows():
         e_ts = r.get("ts")
         if pd.isna(e_ts):
@@ -410,67 +397,16 @@ def _build_trade_event_markers(
             continue
 
         rows.append(
-            {"ts": e_ts, "product_id": product_id, "event_type": str(r.get("event_type") or ""), "message": msg,
-             "y": float(y)}
+            {
+                "ts": e_ts,
+                "product_id": product_id,
+                "event_type": str(r.get("event_type") or ""),
+                "message": msg,
+                "y": float(y),
+            }
         )
 
     return pd.DataFrame(rows)
-
-
-def _render_engine_panel() -> None:
-    st.sidebar.subheader("engine")
-
-    status = get_engine_status()
-    if status.get("running"):
-        st.sidebar.success(f"running (pid {status['pid']})")
-        st.sidebar.caption(f"started: {status['started_at_utc']}")
-        if st.sidebar.button("stop engine", type="primary", use_container_width=True):
-            res = stop_engine()
-            if res.get("ok"):
-                st.sidebar.success(res.get("message", "stopped"))
-                st.rerun()
-            else:
-                st.sidebar.error(res.get("message", "failed to stop"))
-    else:
-        st.sidebar.warning("stopped")
-
-        mode = st.sidebar.selectbox(
-            "run mode",
-            ["demo (rich)", "demo (console)", "csv replay (rich)"],
-            index=0,
-        )
-
-        # always pin db/log to runtime paths
-        base = ["--db", str(DEFAULT_DB_PATH)]
-
-        if mode == "demo (rich)":
-            args = [*base, "--feed", "demo", "--ui", "rich"]
-        elif mode == "demo (console)":
-            args = [*base, "--feed", "demo", "--ui", "console"]
-        else:
-            args = [
-                *base,
-                "--feed",
-                "csv",
-                "--history-csv",
-                str(DEFAULT_HISTORY_CSV),
-                "--replay",
-                "--speed",
-                "600",
-                "--loop",
-                "--ui",
-                "rich",
-            ]
-
-        if st.sidebar.button("start engine", type="primary", use_container_width=True):
-            res = start_engine(args)
-            if res.get("ok"):
-                st.sidebar.success(f"started (pid {res['pid']})")
-                st.rerun()
-            else:
-                st.sidebar.error(res.get("message", "failed to start"))
-
-    st.sidebar.divider()
 
 
 def _render_status_rail(
@@ -486,29 +422,7 @@ def _render_status_rail(
     eth_d, eth_pct = _delta_and_pct(eth_last, eth_prev)
 
     total_realized = float(positions["realized_pnl"].sum()) if not positions.empty else 0.0
-
-    def build_unrealized() -> float:
-        if positions.empty:
-            return 0.0
-        out = 0.0
-        for _, row in positions.iterrows():
-            pid = str(row.get("product_id") or "")
-            qty = float(row.get("base_qty") or 0.0)
-            avg = float(row.get("avg_entry") or 0.0)
-            if qty <= 0:
-                continue
-            if pid == "BTC-USD":
-                px = btc_last
-            elif pid == "ETH-USD":
-                px = eth_last
-            else:
-                px = None
-            if px is None:
-                continue
-            out += (float(px) - avg) * qty
-        return float(out)
-
-    total_unreal = build_unrealized()
+    total_unreal = build_unrealized_pnl(positions, btc_last, eth_last)
     total_pnl = total_realized + total_unreal
 
     last_tick_dt = _safe_dt(last_tick)
@@ -562,14 +476,13 @@ def _render_price_panel(
     st.subheader("price chart")
 
     if prices.empty:
-        st.info("no price ticks yet. start the engine from the sidebar.")
+        st.info("no price ticks yet. start the engine (or run the trader) first.")
         return
 
     df = prices.copy()
     if last_n_ticks > 0:
         uniq = df[["ts"]].drop_duplicates().sort_values("ts")
-        tail = uniq.tail(last_n_ticks)
-        df = df.merge(tail, on="ts", how="inner")
+        df = df.merge(uniq.tail(last_n_ticks), on="ts", how="inner")
 
     df = _apply_asset_focus(df, asset_focus)
 
@@ -577,8 +490,8 @@ def _render_price_panel(
     fig.update_layout(height=420, legend_title_text="")
 
     if show_trade_overlay and not events_for_overlay.empty:
-        markers = _build_trade_event_markers(df, events_for_overlay, asset_focus, max_markers=500)
-
+        markers = _build_trade_event_markers(prices=df, events=events_for_overlay, asset_focus=asset_focus,
+                                             max_markers=500)
         if not markers.empty:
             for event_type in sorted(markers["event_type"].unique().tolist()):
                 m = markers[markers["event_type"] == event_type]
@@ -682,7 +595,6 @@ def _render_positions_panel(prices: pd.DataFrame, positions: pd.DataFrame, table
 
 def _render_events_panel(events: pd.DataFrame) -> None:
     st.subheader("events")
-
     if events.empty:
         st.info("no events yet")
         return
@@ -696,12 +608,80 @@ def _render_events_panel(events: pd.DataFrame) -> None:
 
 def _render_orders_panel(orders: pd.DataFrame) -> None:
     st.subheader("orders")
-
     if orders.empty:
         st.info("no orders found")
         return
-
     st.data_editor(orders, width="stretch", hide_index=True, disabled=True, height=620)
+
+
+def _render_history_tab(history_csv_path: str) -> None:
+    st.subheader("history file")
+
+    summary = load_history_summary(history_csv_path)
+    if not summary.exists:
+        st.warning(f"history file not found: {history_csv_path}")
+    else:
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("rows", f"{summary.rows:,}")
+        c2.metric("unique ticks", f"{summary.unique_ticks:,}")
+        c3.metric("products", str(len(summary.products)))
+        c4.metric("size (mb)", f"{summary.size_bytes / 1024 / 1024:.2f}")
+
+        st.write(
+            {
+                "path": summary.path,
+                "modified_utc": summary.modified_utc,
+                "range_utc": f"{summary.start_utc} → {summary.end_utc}",
+                "products": summary.products,
+            }
+        )
+
+        head, tail = load_history_preview(history_csv_path, n=10)
+        left, right = st.columns(2)
+        with left:
+            st.caption("head")
+            st.dataframe(head, use_container_width=True, height=320)
+        with right:
+            st.caption("tail")
+            st.dataframe(tail, use_container_width=True, height=320)
+
+    st.divider()
+    st.subheader("regenerate history")
+
+    with st.form("regen_history_form", clear_on_submit=False):
+        days = st.slider("days back", min_value=3, max_value=730, value=183, step=1)
+        granularity = st.selectbox("granularity", ["hourly", "daily"], index=0)
+        provider = st.selectbox("provider", ["binance", "coingecko"], index=0)
+
+        out_path = st.text_input("output path", value=history_csv_path)
+        out_path = str(Path(out_path).expanduser())
+
+        binance_base_url = st.text_input(
+            "binance base url (optional)",
+            value="https://data-api.binance.vision",
+            help="only used if provider=binance",
+        )
+
+        submitted = st.form_submit_button("generate", type="primary")
+
+    if submitted:
+        with st.spinner("generating history…"):
+            ok, output = regenerate_history(
+                days=days,
+                granularity=granularity,
+                provider=provider,
+                out_path=out_path,
+                binance_base_url=binance_base_url if provider == "binance" else None,
+            )
+
+        if ok:
+            st.success("generated ✅")
+            st.session_state.history_csv_path = out_path
+            st.code(output[-6000:] if len(output) > 6000 else output)
+            st.rerun()
+        else:
+            st.error("generation failed")
+            st.code(output[-8000:] if len(output) > 8000 else output)
 
 
 def _run_every(refresh_sec: int) -> Optional[dt.timedelta]:
@@ -773,12 +753,8 @@ def _frag_overview(
 
     with right:
         with st.container(border=True):
-            _render_positions_panel(
-                prices=prices,
-                positions=positions,
-                table_density=table_density,
-                asset_focus=asset_focus,
-            )
+            _render_positions_panel(prices=prices, positions=positions, table_density=table_density,
+                                    asset_focus=asset_focus)
 
 
 @fragment
@@ -832,21 +808,89 @@ def _frag_diagnostics(db_path: str) -> None:
         )
 
 
+def _render_engine_panel(history_csv_path: str) -> None:
+    st.sidebar.subheader("engine")
+
+    status = get_engine_status()
+    if status.get("running"):
+        st.sidebar.success(f"running (pid {status['pid']})")
+        st.sidebar.caption(f"started: {status['started_at_utc']}")
+        if st.sidebar.button("stop engine", type="primary", use_container_width=True):
+            res = stop_engine()
+            if res.get("ok"):
+                st.sidebar.success(res.get("message", "stopped"))
+                st.rerun()
+            else:
+                st.sidebar.error(res.get("message", "failed to stop"))
+    else:
+        st.sidebar.warning("stopped")
+
+        mode = st.sidebar.selectbox(
+            "run mode",
+            ["demo (rich)", "demo (console)", "csv replay (rich)"],
+            index=0,
+        )
+
+        base = ["--db", str(DEFAULT_DB_PATH)]
+
+        if mode == "demo (rich)":
+            args = [*base, "--feed", "demo", "--ui", "rich"]
+        elif mode == "demo (console)":
+            args = [*base, "--feed", "demo", "--ui", "console"]
+        else:
+            args = [
+                *base,
+                "--feed",
+                "csv",
+                "--history-csv",
+                history_csv_path,  # use the currently selected history file
+                "--replay",
+                "--speed",
+                "600",
+                "--loop",
+                "--ui",
+                "rich",
+            ]
+
+        st.sidebar.code(" ".join(["python", "paper_trader.py", *args]), language="bash")
+
+        if st.sidebar.button("start engine", type="primary", use_container_width=True):
+            res = start_engine(args)
+            if res.get("ok"):
+                st.sidebar.success(f"started (pid {res['pid']})")
+                st.rerun()
+            else:
+                st.sidebar.error(res.get("message", "failed to start"))
+
+    st.sidebar.divider()
+
+
 def run_app() -> None:
     st.set_page_config(page_title=APP_TITLE, layout="wide")
     _inject_global_css()
 
+    # header (no border)
     with st.container():
         st.title(APP_TITLE)
         st.caption("A dashboard to experiment with losing money while trading. Enjoy!")
     st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
 
-    _render_engine_panel()
+    # persistent session state for history file
+    if "history_csv_path" not in st.session_state:
+        st.session_state.history_csv_path = str(DEFAULT_HISTORY_CSV)
+
+    # sidebar: history path selector (simple)
+    st.sidebar.subheader("history")
+    history_csv_path = st.sidebar.text_input("history csv path", value=st.session_state.history_csv_path)
+    history_csv_path = _normalize_path(history_csv_path)
+    st.session_state.history_csv_path = history_csv_path
+
+    # sidebar: engine controls use the selected history path
+    _render_engine_panel(history_csv_path)
 
     st.sidebar.subheader("controls")
-
     db_path = st.sidebar.text_input("sqlite db path", value=str(DEFAULT_DB_PATH))
-    db_path = _normalize_db_path(db_path)
+    db_path = _normalize_path(db_path)
 
     auto_refresh = st.sidebar.checkbox("auto refresh", value=True)
     refresh_sec = st.sidebar.slider("refresh seconds", min_value=1, max_value=10, value=2)
@@ -916,12 +960,27 @@ def run_app() -> None:
 
     st.divider()
 
-    tab_names = ["overview", "events", "diagnostics"]
+    # tabs: overview, (orders), events, history, diagnostics
+    tab_names = ["overview", "events", "history", "diagnostics"]
     if show_orders:
         tab_names.insert(1, "orders")
     tabs = st.tabs(tab_names)
 
-    with tabs[0]:
+    # index mapping
+    idx = 0
+    overview_tab = tabs[idx]
+    idx += 1
+    orders_tab = None
+    if show_orders:
+        orders_tab = tabs[idx]
+        idx += 1
+    events_tab = tabs[idx]
+    idx += 1
+    history_tab = tabs[idx]
+    idx += 1
+    diag_tab = tabs[idx]
+
+    with overview_tab:
         frag_overview_live(
             db_path=db_path,
             asset_focus=asset_focus,
@@ -935,14 +994,9 @@ def run_app() -> None:
             event_search=event_search,
         )
 
-    if show_orders:
-        with tabs[1]:
+    if orders_tab is not None:
+        with orders_tab:
             frag_orders_live(db_path=db_path, asset_focus=asset_focus)
-        events_tab = tabs[2]
-        diag_tab = tabs[3]
-    else:
-        events_tab = tabs[1]
-        diag_tab = tabs[2]
 
     with events_tab:
         frag_events_live(
@@ -954,6 +1008,9 @@ def run_app() -> None:
             event_types_selected=event_types_selected,
             event_search=event_search,
         )
+
+    with history_tab:
+        _render_history_tab(history_csv_path)
 
     with diag_tab:
         frag_diagnostics_live(db_path=db_path)
