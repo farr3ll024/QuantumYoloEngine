@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import datetime as dt
 import re
-from typing import Optional, Set, Callable, Any, Tuple, Dict
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional, Set, Tuple
 
 import pandas as pd
 import plotly.express as plotly_express
@@ -11,16 +12,17 @@ import plotly.graph_objects as go
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-from .constants import APP_TITLE, DB_PATH_DEFAULT
+from .constants import APP_TITLE
 from .db import clear_all_data, load_events, load_orders, load_positions, load_price_ticks
 from .metrics import (
     build_unrealized_pnl,
     compute_asset_pnl_rows,
     format_usd,
     last_db_tick_ts,
-    latest_price,
     load_equity_curve,
 )
+
+DEFAULT_DB_PATH = Path("runtime/db/paper_trader.db")
 
 # trade-related event types we can overlay on the chart
 SIGNAL_EVENT_TYPES: Set[str] = {"entry_filled", "tp1_filled", "tp2_filled", "stop_filled", "stop_moved"}
@@ -55,6 +57,19 @@ else:
             return fn
 
         return deco
+
+
+# -----------------------------
+# path helpers
+# -----------------------------
+def _ensure_parent_dir(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _normalize_db_path(value: str) -> str:
+    p = Path(value).expanduser()
+    _ensure_parent_dir(p)
+    return str(p)
 
 
 # -----------------------------
@@ -101,7 +116,10 @@ def _pnl_color(value: float) -> str:
 def _colored_money(value: float, font_px: int = 20) -> str:
     color = _pnl_color(value)
     sign = "" if value < 0 else "+"
-    return f"<span style='color:{color}; font-weight:800; font-size:{font_px}px; line-height:1.1'>{sign}{format_usd(value)}</span>"
+    return (
+        f"<span style='color:{color}; font-weight:800; font-size:{font_px}px; line-height:1.1'>"
+        f"{sign}{format_usd(value)}</span>"
+    )
 
 
 def _label(text: str, font_px: int = 14) -> str:
@@ -163,7 +181,6 @@ def _apply_dark_plotly_theme(fig: go.Figure) -> None:
         hoverlabel=dict(bgcolor="rgba(15,23,42,0.95)", font=dict(color="white")),
     )
 
-    # axis styling (no titlefont; use title=dict(font=...) in modern plotly)
     fig.update_xaxes(
         showgrid=True,
         gridcolor="rgba(148,163,184,0.18)",
@@ -179,17 +196,16 @@ def _apply_dark_plotly_theme(fig: go.Figure) -> None:
         title=dict(font=dict(color="rgba(255,255,255,0.85)", size=12)),
     )
 
-    # IMPORTANT: force readable series colors on dark background
     fig.update_layout(
         colorway=[
-            "#60a5fa",  # blue
-            "#a78bfa",  # purple
-            "#34d399",  # green
-            "#fbbf24",  # amber
-            "#f87171",  # red
-            "#22d3ee",  # cyan
-            "#fb7185",  # rose
-            "#cbd5e1",  # slate
+            "#60a5fa",
+            "#a78bfa",
+            "#34d399",
+            "#fbbf24",
+            "#f87171",
+            "#22d3ee",
+            "#fb7185",
+            "#cbd5e1",
         ]
     )
 
@@ -286,7 +302,6 @@ def render_dev_tools(db_path: str) -> None:
 # trade overlay helpers
 # -----------------------------
 def _extract_price_from_message(msg: str) -> Optional[float]:
-    # matches "... at 108000.00" or "... at 4320"
     m = re.search(r"\bat\s+([0-9]+(?:\.[0-9]+)?)\b", msg or "")
     if not m:
         return None
@@ -469,12 +484,7 @@ def _render_price_panel(
                             lambda r: f"{r['product_id']} • {r['event_type']} • {r['message']}",
                             axis=1,
                         ),
-                        marker=dict(
-                            size=11,
-                            symbol="circle",
-                            color=color,
-                            line=dict(width=0),
-                        ),
+                        marker=dict(size=11, symbol="circle", color=color, line=dict(width=0)),
                     )
                 )
 
@@ -573,13 +583,7 @@ def _render_events_panel(events: pd.DataFrame) -> None:
     if "ts" in view.columns and not view["ts"].empty:
         view["ts"] = view["ts"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-    st.data_editor(
-        view.head(500),
-        width="stretch",
-        hide_index=True,
-        disabled=True,
-        height=620,
-    )
+    st.data_editor(view.head(500), width="stretch", hide_index=True, disabled=True, height=620)
 
 
 def _render_orders_panel(orders: pd.DataFrame) -> None:
@@ -589,13 +593,7 @@ def _render_orders_panel(orders: pd.DataFrame) -> None:
         st.info("no orders found")
         return
 
-    st.data_editor(
-        orders,
-        width="stretch",
-        hide_index=True,
-        disabled=True,
-        height=620,
-    )
+    st.data_editor(orders, width="stretch", hide_index=True, disabled=True, height=620)
 
 
 # -----------------------------
@@ -720,6 +718,7 @@ def _frag_diagnostics(db_path: str) -> None:
         st.subheader("diagnostics")
         st.write(
             {
+                "db_path": db_path,
                 "prices_rows": int(len(prices)),
                 "events_rows": int(len(events)),
                 "orders_rows": int(len(orders)),
@@ -739,7 +738,8 @@ def run_app() -> None:
 
     st.sidebar.subheader("controls")
 
-    db_path = st.sidebar.text_input("sqlite db path", value=DB_PATH_DEFAULT)
+    db_path = st.sidebar.text_input("sqlite db path", value=str(DEFAULT_DB_PATH))
+    db_path = _normalize_db_path(db_path)
 
     auto_refresh = st.sidebar.checkbox("auto refresh", value=True)
     refresh_sec = st.sidebar.slider("refresh seconds", min_value=1, max_value=10, value=2)

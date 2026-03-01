@@ -33,7 +33,13 @@ class PaperTrader:
                 existing = self.store.get_position(product_id)
                 if existing is None:
                     self.store.upsert_position(PositionState(product_id=product_id), ts_iso=now_iso)
-                    self.store.log_event("info", "bootstrap_position", "created initial position state", product_id, ts_iso=now_iso)
+                    self.store.log_event(
+                        "info",
+                        "bootstrap_position",
+                        "created initial position state",
+                        product_id,
+                        ts_iso=now_iso,
+                    )
 
                 existing_entry_orders = self.store.get_orders_by_type(product_id, "entry")
                 if not existing_entry_orders:
@@ -88,17 +94,25 @@ class PaperTrader:
     def _fill_entries(self, strat: AssetStrategy, pos: PositionState, market_price: float, ts_iso: str) -> None:
         open_entries = self.store.get_orders_by_type(strat.product_id, "entry", status="open")
         for order in open_entries:
-            if market_price <= float(order["price"]):
+            limit_price = float(order["price"])
+
+            # buy limit: eligible when market is at or below the limit
+            if market_price <= limit_price:
                 quote_size = float(order["quote_size_usd"])
-                fill_price = float(order["price"])
+
+                # fill at the best available price (never worse than the limit)
+                fill_price = min(limit_price, float(market_price))
+
                 base_qty = quote_size / fill_price
 
                 new_base = pos.base_qty + base_qty
                 if new_base <= 0:
                     continue
 
-                new_avg = fill_price if pos.base_qty <= 0 else (
-                    ((pos.avg_entry * pos.base_qty) + (fill_price * base_qty)) / new_base
+                new_avg = (
+                    fill_price
+                    if pos.base_qty <= 0
+                    else (((pos.avg_entry * pos.base_qty) + (fill_price * base_qty)) / new_base)
                 )
 
                 pos.base_qty = new_base
@@ -117,14 +131,17 @@ class PaperTrader:
                         "quote_size": quote_size,
                         "base_qty": base_qty,
                         "new_avg_entry": new_avg,
-                        "market_price": market_price,
+                        "market_price": float(market_price),
+                        "limit_price": limit_price,
                     },
                     ts_iso=ts_iso,
                 )
                 self.logger.info(
-                    "%s entry filled | %s | fill=%.2f | qty=%.8f | avg=%.2f",
+                    "%s entry filled | %s | market=%.2f | limit=%.2f | fill=%.2f | qty=%.8f | avg=%.2f",
                     strat.product_id,
                     order["rule_id"],
+                    float(market_price),
+                    limit_price,
                     fill_price,
                     base_qty,
                     new_avg,
@@ -178,7 +195,10 @@ class PaperTrader:
             return
 
         qty_to_sell = pos.base_qty
-        fill_price = strat.stop_price
+
+        # stop: fill at the best available price (never better than stop for a sell stop)
+        fill_price = min(float(market_price), float(strat.stop_price))
+
         realized = (fill_price - pos.avg_entry) * qty_to_sell
 
         pos.realized_pnl += realized
@@ -199,12 +219,19 @@ class PaperTrader:
             "stop_filled",
             f"stop filled at {fill_price:.2f}",
             strat.product_id,
-            payload={"qty": qty_to_sell, "realized_pnl": realized},
+            payload={
+                "qty": qty_to_sell,
+                "realized_pnl": realized,
+                "market_price": float(market_price),
+                "stop_price": float(strat.stop_price),
+            },
             ts_iso=ts_iso,
         )
         self.logger.warning(
-            "%s stop filled | fill=%.2f | qty=%.8f | realized=%.2f",
+            "%s stop filled | market=%.2f | stop=%.2f | fill=%.2f | qty=%.8f | realized=%.2f",
             strat.product_id,
+            float(market_price),
+            float(strat.stop_price),
             fill_price,
             qty_to_sell,
             realized,
@@ -217,7 +244,10 @@ class PaperTrader:
 
         if not pos.tp1_done and market_price >= strat.take_profit.tp1_price:
             qty = pos.base_qty * strat.take_profit.tp1_fraction
-            fill_price = strat.take_profit.tp1_price
+
+            # take profit: fill at the best available price (never worse than the tp limit)
+            fill_price = max(float(market_price), float(strat.take_profit.tp1_price))
+
             realized = (fill_price - pos.avg_entry) * qty
 
             pos.base_qty -= qty
@@ -239,7 +269,12 @@ class PaperTrader:
                     strat.product_id,
                     ts_iso=ts_iso,
                 )
-                self.logger.info("%s stop moved to breakeven | old=%.2f | new=%.2f", strat.product_id, old_stop, strat.stop_price)
+                self.logger.info(
+                    "%s stop moved to breakeven | old=%.2f | new=%.2f",
+                    strat.product_id,
+                    old_stop,
+                    strat.stop_price,
+                )
 
             self.store.upsert_position(pos, ts_iso=ts_iso)
             self.store.log_event(
@@ -247,10 +282,23 @@ class PaperTrader:
                 "tp1_filled",
                 f"tp1 filled at {fill_price:.2f}",
                 strat.product_id,
-                payload={"qty": qty, "realized_pnl": realized},
+                payload={
+                    "qty": qty,
+                    "realized_pnl": realized,
+                    "market_price": float(market_price),
+                    "tp1_price": float(strat.take_profit.tp1_price),
+                },
                 ts_iso=ts_iso,
             )
-            self.logger.info("%s tp1 filled | fill=%.2f | qty=%.8f | realized=%.2f", strat.product_id, fill_price, qty, realized)
+            self.logger.info(
+                "%s tp1 filled | market=%.2f | tp1=%.2f | fill=%.2f | qty=%.8f | realized=%.2f",
+                strat.product_id,
+                float(market_price),
+                float(strat.take_profit.tp1_price),
+                fill_price,
+                qty,
+                realized,
+            )
 
         pos = self.store.get_position(strat.product_id)
         if pos is None or not pos.has_position:
@@ -258,7 +306,10 @@ class PaperTrader:
 
         if not pos.tp2_done and market_price >= strat.take_profit.tp2_price:
             qty = pos.base_qty
-            fill_price = strat.take_profit.tp2_price
+
+            # take profit: fill at the best available price (never worse than the tp limit)
+            fill_price = max(float(market_price), float(strat.take_profit.tp2_price))
+
             realized = (fill_price - pos.avg_entry) * qty
 
             pos.base_qty = 0.0
@@ -278,7 +329,20 @@ class PaperTrader:
                 "tp2_filled",
                 f"tp2 filled at {fill_price:.2f}",
                 strat.product_id,
-                payload={"qty": qty, "realized_pnl": realized},
+                payload={
+                    "qty": qty,
+                    "realized_pnl": realized,
+                    "market_price": float(market_price),
+                    "tp2_price": float(strat.take_profit.tp2_price),
+                },
                 ts_iso=ts_iso,
             )
-            self.logger.info("%s tp2 filled | fill=%.2f | qty=%.8f | realized=%.2f", strat.product_id, fill_price, qty, realized)
+            self.logger.info(
+                "%s tp2 filled | market=%.2f | tp2=%.2f | fill=%.2f | qty=%.8f | realized=%.2f",
+                strat.product_id,
+                float(market_price),
+                float(strat.take_profit.tp2_price),
+                fill_price,
+                qty,
+                realized,
+            )

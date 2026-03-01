@@ -6,6 +6,7 @@ import datetime as dt
 import logging
 import time
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Optional
 
 from rich.console import Console
@@ -18,13 +19,24 @@ from .store import StateStore
 from .strategy import load_strategy_config
 from .ui_rich import build_rich_dashboard, print_recent_events
 
+DEFAULT_CONFIG_PATH = Path("strategy.yaml")
+DEFAULT_DB_PATH = Path("runtime/db/paper_trader.db")
+DEFAULT_HISTORY_CSV_PATH = Path("data/history.csv")
+DEFAULT_LOG_PATH = Path("runtime/logs/paper_trader.log")
 
-def setup_logger(log_level: str = "INFO") -> logging.Logger:
+
+def ensure_parent_dir(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def setup_logger(log_level: str = "INFO", log_path: Path = DEFAULT_LOG_PATH) -> logging.Logger:
     logger = logging.getLogger("paper_trader")
     logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
 
     if logger.handlers:
         return logger
+
+    ensure_parent_dir(log_path)
 
     formatter = logging.Formatter(
         "%(asctime)s | %(levelname)s | %(message)s",
@@ -35,7 +47,7 @@ def setup_logger(log_level: str = "INFO") -> logging.Logger:
     console_handler.setFormatter(formatter)
     console_handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
 
-    file_handler = RotatingFileHandler("paper_trader.log", maxBytes=1_000_000, backupCount=3)
+    file_handler = RotatingFileHandler(str(log_path), maxBytes=1_000_000, backupCount=3)
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.DEBUG)
 
@@ -53,8 +65,9 @@ def compute_replay_sleep(prev_ts: Optional[dt.datetime], ts: dt.datetime, speed:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="QuantumYoloEngine paper trader")
-    parser.add_argument("--config", default="strategy.yaml", help="path to strategy yaml")
-    parser.add_argument("--db", default="paper_trader.db", help="sqlite db path")
+    parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="path to strategy yaml")
+    parser.add_argument("--db", default=str(DEFAULT_DB_PATH), help="sqlite db path")
+    parser.add_argument("--log-file", default=str(DEFAULT_LOG_PATH), help="log file path")
 
     # demo-only settings
     parser.add_argument("--ticks", type=int, default=70, help="number of demo ticks to run")
@@ -63,9 +76,18 @@ def main() -> None:
 
     # feed selection
     parser.add_argument("--feed", choices=["demo", "csv"], default="demo", help="market feed type")
-    parser.add_argument("--history-csv", default="history.csv", help="path to history csv when feed=csv")
-    parser.add_argument("--replay", action="store_true", help="sleep between historical ticks (csv feed)")
-    parser.add_argument("--speed", type=float, default=60.0, help="replay speed: 60 means 60x faster than real time (csv feed)")
+    parser.add_argument("--history-csv", default=str(DEFAULT_HISTORY_CSV_PATH), help="path to history csv when feed=csv")
+    parser.add_argument(
+        "--replay",
+        action="store_true",
+        help="sleep between historical ticks (csv feed)",
+    )
+    parser.add_argument(
+        "--speed",
+        type=float,
+        default=60.0,
+        help="replay speed: 60 means 60x faster than real time (csv feed)",
+    )
 
     # csv looping
     parser.add_argument("--loop", action="store_true", help="loop the csv feed forever")
@@ -78,16 +100,22 @@ def main() -> None:
     parser.add_argument("--quiet", action="store_true", help="minimal console logging")
     args = parser.parse_args()
 
-    logger = setup_logger(args.log_level)
+    db_path = Path(args.db)
+    log_path = Path(args.log_file)
+    history_csv_path = Path(args.history_csv)
+    config_path = Path(args.config)
 
-    bankroll, strategies = load_strategy_config(args.config)
+    ensure_parent_dir(db_path)
+    logger = setup_logger(args.log_level, log_path=log_path)
+
+    bankroll, strategies = load_strategy_config(str(config_path))
     risk = RiskManager(bankroll_usd=bankroll)
     risk.validate_strategy_allocations(strategies)
     for strat in strategies.values():
         if strat.enabled:
             risk.validate_entry_budget(strat)
 
-    store = StateStore(args.db)
+    store = StateStore(str(db_path))
     trader = PaperTrader(
         store=store,
         strategies=strategies,
@@ -99,14 +127,14 @@ def main() -> None:
     console = Console()
 
     logger.info("starting QuantumYoloEngine paper trader")
-    logger.info("db=%s | feed=%s | ui=%s", args.db, args.feed, args.ui)
+    logger.info("config=%s | db=%s | feed=%s | ui=%s", str(config_path), str(db_path), args.feed, args.ui)
 
     try:
         if args.feed == "csv":
             tick_num = 0
 
             def new_csv_iter():
-                return iter(CsvMarketFeed(args.history_csv))
+                return iter(CsvMarketFeed(str(history_csv_path)))
 
             if args.ui == "rich":
                 with Live(
