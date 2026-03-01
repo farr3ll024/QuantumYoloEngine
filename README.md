@@ -18,7 +18,7 @@ It’s intentionally experimental and a bit unhinged. Use it to learn, not to fu
 - `quantum_yolo_engine/` — core engine (strategies, store, feeds, CLI, rich UI)
 - `dashboard/` — Streamlit dashboard code
 - `strategy.yaml` — strategy + risk config (bankroll, allocations, ladder entries, stop/TP)
-- `paper_trader.db` — runtime SQLite database (created locally; typically ignored by git)
+- `runtime/db/paper_trader.db` — default runtime SQLite database location (created locally; typically ignored by git)
 - `scripts/` — convenience scripts
 
 ---
@@ -52,7 +52,10 @@ bash
 source .venv/bin/activate
 python -m streamlit run dashboard_streamlit.py
 ```
-By default, the dashboard reads `paper_trader.db`. If you use a different DB path, update the dashboard’s sidebar input.
+By default, the dashboard reads from `runtime/db/paper_trader.db`.
+
+- You can change the DB path in the dashboard sidebar.
+- The dashboard will also create the parent directory for the DB path if it doesn’t exist yet (so fresh checkouts work nicely with the default `runtime/db/...` path).
 
 ---
 
@@ -112,7 +115,7 @@ The engine validates:
 
 ## Database
 
-Trading state is written to a local SQLite DB (default: `paper_trader.db`) with tables:
+Trading state is written to a local SQLite DB (default: `runtime/db/paper_trader.db`) with tables:
 
 - `price_ticks` — time series prices
 - `orders` — entry/stop/tp orders (open/filled/canceled)
@@ -131,7 +134,7 @@ python paper_trader.py --help
 Common ones:
 
 - `--config strategy.yaml` — strategy config path
-- `--db paper_trader.db` — SQLite db path
+- `--db runtime/db/paper_trader.db` — SQLite db path
 - `--feed demo|csv` — market feed
 - `--ui rich|console` — terminal display mode
 - `--no-breakeven-stop` — don’t move stop to breakeven after TP1
@@ -150,3 +153,4 @@ Common ones:
 ## Disclaimer
 
 This is a learning/paper-trading project. It does not connect to an exchange, and it is **not** financial advice. If you trade real money based on a repo named “QuantumYoloEngine”, that’s between you and your future self.
+

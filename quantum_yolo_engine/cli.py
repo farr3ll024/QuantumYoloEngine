@@ -17,6 +17,7 @@ from .feeds import CsvMarketFeed, DemoMarketFeed
 from .risk import RiskManager
 from .store import StateStore
 from .strategy import load_strategy_config
+from .theme import RICH_THEME
 from .ui_rich import build_rich_dashboard, print_recent_events
 
 DEFAULT_CONFIG_PATH = Path("strategy.yaml")
@@ -76,12 +77,9 @@ def main() -> None:
 
     # feed selection
     parser.add_argument("--feed", choices=["demo", "csv"], default="demo", help="market feed type")
-    parser.add_argument("--history-csv", default=str(DEFAULT_HISTORY_CSV_PATH), help="path to history csv when feed=csv")
-    parser.add_argument(
-        "--replay",
-        action="store_true",
-        help="sleep between historical ticks (csv feed)",
-    )
+    parser.add_argument("--history-csv", default=str(DEFAULT_HISTORY_CSV_PATH),
+                        help="path to history csv when feed=csv")
+    parser.add_argument("--replay", action="store_true", help="sleep between historical ticks (csv feed)")
     parser.add_argument(
         "--speed",
         type=float,
@@ -124,7 +122,7 @@ def main() -> None:
     )
     trader.bootstrap()
 
-    console = Console()
+    console = Console(theme=RICH_THEME)
 
     logger.info("starting QuantumYoloEngine paper trader")
     logger.info("config=%s | db=%s | feed=%s | ui=%s", str(config_path), str(db_path), args.feed, args.ui)
@@ -138,9 +136,9 @@ def main() -> None:
 
             if args.ui == "rich":
                 with Live(
-                    build_rich_dashboard(store, {"BTC-USD": 0.0, "ETH-USD": 0.0}, 0),
-                    refresh_per_second=8,
-                    console=console,
+                        build_rich_dashboard(store, {"BTC-USD": 0.0, "ETH-USD": 0.0}, 0),
+                        refresh_per_second=8,
+                        console=console,
                 ) as live:
                     while True:
                         prev_ts: Optional[dt.datetime] = None
@@ -192,9 +190,9 @@ def main() -> None:
 
             if args.ui == "rich":
                 with Live(
-                    build_rich_dashboard(store, {"BTC-USD": 0.0, "ETH-USD": 0.0}, 0),
-                    refresh_per_second=8,
-                    console=console,
+                        build_rich_dashboard(store, {"BTC-USD": 0.0, "ETH-USD": 0.0}, 0),
+                        refresh_per_second=8,
+                        console=console,
                 ) as live:
                     for i in range(args.ticks):
                         prices = demo_feed.next_prices()

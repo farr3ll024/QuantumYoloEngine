@@ -32,8 +32,8 @@ def build_rich_dashboard(store: StateStore, prices: PriceSnapshot, tick_num: int
         px = prices.get(pid, 0.0)
         unreal = (px - pos.avg_entry) * pos.base_qty if pos.base_qty > 0 else 0.0
 
-        realized_style = "green" if pos.realized_pnl >= 0 else "red"
-        unreal_style = "green" if unreal >= 0 else "red"
+        realized_style = "qye.success" if pos.realized_pnl >= 0 else "qye.danger"
+        unreal_style = "qye.success" if unreal >= 0 else "qye.danger"
 
         pos_table.add_row(
             pid,
@@ -49,8 +49,7 @@ def build_rich_dashboard(store: StateStore, prices: PriceSnapshot, tick_num: int
         """
         select ts, product_id, event_type, message
         from events
-        order by id desc
-        limit 10
+        order by id desc limit 10
         """
     ).fetchall()
 
@@ -70,11 +69,11 @@ def build_rich_dashboard(store: StateStore, prices: PriceSnapshot, tick_num: int
         )
 
     group = Group(
-        Panel(prices_table, border_style="cyan"),
-        Panel(pos_table, border_style="green"),
-        Panel(events_table, border_style="magenta"),
+        Panel(prices_table, border_style="qye.primary"),
+        Panel(pos_table, border_style="qye.success"),
+        Panel(events_table, border_style="qye.purple"),
     )
-    return Panel(group, title="live dashboard", border_style="white")
+    return Panel(group, title="live dashboard", border_style="qye.muted")
 
 
 def print_recent_events(store: StateStore, limit: int = 12) -> None:
@@ -83,8 +82,7 @@ def print_recent_events(store: StateStore, limit: int = 12) -> None:
         """
         select ts, level, product_id, event_type, message
         from events
-        order by id desc
-        limit ?
+        order by id desc limit ?
         """,
         (limit,),
     ).fetchall()

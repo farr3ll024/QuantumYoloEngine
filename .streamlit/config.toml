@@ -1,7 +1,15 @@
+# .streamlit/config.toml
+
 [theme]
-base="dark"
-primaryColor="#00D4FF"
-backgroundColor="#0B1220"
-secondaryBackgroundColor="#111A2E"
-textColor="#E6EDF3"
-font="sans serif"
+base = "dark"
+primaryColor = "#60a5fa"
+backgroundColor = "#0b1220"
+secondaryBackgroundColor = "#0f172a"
+textColor = "#e5e7eb"
+font = "sans serif"
+
+[server]
+runOnSave = true
+
+[browser]
+gatherUsageStats = false

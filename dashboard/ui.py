@@ -21,6 +21,7 @@ from .metrics import (
     last_db_tick_ts,
     load_equity_curve,
 )
+from .theme import THEME
 
 DEFAULT_DB_PATH = Path("runtime/db/paper_trader.db")
 
@@ -36,11 +37,11 @@ PLOTLY_CONFIG = {
 
 # event marker colors (dark theme friendly)
 EVENT_COLORS: Dict[str, str] = {
-    "entry_filled": "#34d399",  # green
-    "tp1_filled": "#60a5fa",  # blue
-    "tp2_filled": "#a78bfa",  # purple
-    "stop_filled": "#f87171",  # red
-    "stop_moved": "#fbbf24",  # amber
+    "entry_filled": THEME.success,
+    "tp1_filled": THEME.primary,
+    "tp2_filled": THEME.purple,
+    "stop_filled": THEME.danger,
+    "stop_moved": THEME.warn,
 }
 
 # -----------------------------
@@ -57,6 +58,63 @@ else:
             return fn
 
         return deco
+
+
+# -----------------------------
+# global styling
+# -----------------------------
+def _inject_global_css() -> None:
+    st.markdown(
+        f"""
+        <style>
+          /* layout */
+          .block-container {{
+            padding-top: 1.2rem;
+            padding-bottom: 2.2rem;
+            max-width: 1400px;
+          }}
+
+          /* sidebar spacing */
+          section[data-testid="stSidebar"] > div {{
+            padding-top: 1rem;
+          }}
+
+          /* typography */
+          h1, h2, h3 {{
+            letter-spacing: -0.02em;
+          }}
+
+          /* polish for st.container(border=True) */
+          div[data-testid="stVerticalBlockBorderWrapper"] {{
+            border: 1px solid {THEME.border} !important;
+            border-radius: 16px !important;
+            background: linear-gradient(180deg, {THEME.panel} 0%, {THEME.panel2} 100%) !important;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.25) !important;
+          }}
+
+          /* tabs */
+          button[role="tab"] {{
+            border-radius: 12px !important;
+            padding: 0.35rem 0.9rem !important;
+            margin-right: 0.25rem !important;
+          }}
+
+          /* dataframe/data_editor wrapper */
+          div[data-testid="stDataFrame"] {{
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid {THEME.border};
+          }}
+
+          /* small muted helper */
+          .qye-muted {{
+            color: {THEME.text_muted};
+            font-weight: 600;
+          }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # -----------------------------
@@ -101,16 +159,16 @@ def _format_seconds(s: Optional[float]) -> str:
     if s < 60:
         return f"{s:.0f}s"
     if s < 3600:
-        return f"{s/60:.1f}m"
-    return f"{s/3600:.2f}h"
+        return f"{s / 60:.1f}m"
+    return f"{s / 3600:.2f}h"
 
 
 def _pnl_color(value: float) -> str:
     if value > 0:
-        return "#16a34a"  # green
+        return THEME.success
     if value < 0:
-        return "#dc2626"  # red
-    return "#6b7280"  # gray
+        return THEME.danger
+    return "rgba(255,255,255,0.55)"
 
 
 def _colored_money(value: float, font_px: int = 20) -> str:
@@ -123,13 +181,14 @@ def _colored_money(value: float, font_px: int = 20) -> str:
 
 
 def _label(text: str, font_px: int = 14) -> str:
-    return f"<div style='font-size:{font_px}px; font-weight:700; color: rgba(255,255,255,0.72); margin-bottom:4px'>{text}</div>"
+    return (
+        f"<div style='font-size:{font_px}px; font-weight:700; color:{THEME.text_muted}; margin-bottom:4px'>"
+        f"{text}</div>"
+    )
 
 
 def _last_and_prev_price(prices: pd.DataFrame, product_id: str) -> Tuple[Optional[float], Optional[float]]:
-    """
-    Returns (last_price, prev_price) for product_id based on ts ordering.
-    """
+    # returns (last_price, prev_price) for product_id based on ts ordering.
     if prices.empty or "product_id" not in prices.columns:
         return None, None
 
@@ -163,50 +222,31 @@ def _delta_and_pct(last_px: Optional[float], prev_px: Optional[float]) -> Tuple[
 # plotly theme helpers
 # -----------------------------
 def _apply_dark_plotly_theme(fig: go.Figure) -> None:
-    """
-    Makes plotly charts dark without relying on global templates.
-    Also forces a non-black colorway so lines/markers stay visible.
-    """
+    # makes plotly charts dark without relying on global templates.
     fig.update_layout(
-        paper_bgcolor="#0b1220",
-        plot_bgcolor="#0b1220",
-        font=dict(color="rgba(255,255,255,0.88)"),
-        legend=dict(
-            bgcolor="rgba(0,0,0,0)",
-            borderwidth=0,
-            font=dict(color="rgba(255,255,255,0.85)"),
-        ),
+        paper_bgcolor=THEME.bg,
+        plot_bgcolor=THEME.bg,
+        font=dict(color=THEME.text),
+        legend=dict(bgcolor="rgba(0,0,0,0)", borderwidth=0, font=dict(color=THEME.text_muted)),
         margin=dict(l=60, r=20, t=40, b=60),
         hovermode="x unified",
         hoverlabel=dict(bgcolor="rgba(15,23,42,0.95)", font=dict(color="white")),
+        colorway=list(THEME.colorway),
     )
 
     fig.update_xaxes(
         showgrid=True,
-        gridcolor="rgba(148,163,184,0.18)",
+        gridcolor=THEME.border,
         zeroline=False,
-        tickfont=dict(color="rgba(255,255,255,0.78)", size=11),
-        title=dict(font=dict(color="rgba(255,255,255,0.85)", size=12)),
+        tickfont=dict(color=THEME.text_muted, size=11),
+        title=dict(font=dict(color=THEME.text, size=12)),
     )
     fig.update_yaxes(
         showgrid=True,
-        gridcolor="rgba(148,163,184,0.18)",
+        gridcolor=THEME.border,
         zeroline=False,
-        tickfont=dict(color="rgba(255,255,255,0.78)", size=11),
-        title=dict(font=dict(color="rgba(255,255,255,0.85)", size=12)),
-    )
-
-    fig.update_layout(
-        colorway=[
-            "#60a5fa",
-            "#a78bfa",
-            "#34d399",
-            "#fbbf24",
-            "#f87171",
-            "#22d3ee",
-            "#fb7185",
-            "#cbd5e1",
-        ]
+        tickfont=dict(color=THEME.text_muted, size=11),
+        title=dict(font=dict(color=THEME.text, size=12)),
     )
 
 
@@ -224,12 +264,12 @@ def _apply_asset_focus(df: pd.DataFrame, asset_focus: str) -> pd.DataFrame:
 
 
 def _apply_events_filters(
-    events: pd.DataFrame,
-    asset_focus: str,
-    only_signals: bool,
-    levels: Set[str],
-    event_types: Set[str],
-    text_query: str,
+        events: pd.DataFrame,
+        asset_focus: str,
+        only_signals: bool,
+        levels: Set[str],
+        event_types: Set[str],
+        text_query: str,
 ) -> pd.DataFrame:
     if events.empty:
         return events
@@ -248,11 +288,11 @@ def _apply_events_filters(
     q = (text_query or "").strip().lower()
     if q:
         hay = (
-            df["message"].astype(str).str.lower()
-            + " "
-            + df["event_type"].astype(str).str.lower()
-            + " "
-            + df["product_id"].astype(str).str.lower()
+                df["message"].astype(str).str.lower()
+                + " "
+                + df["event_type"].astype(str).str.lower()
+                + " "
+                + df["product_id"].astype(str).str.lower()
         )
         df = df[hay.str.contains(q, na=False)]
 
@@ -302,6 +342,7 @@ def render_dev_tools(db_path: str) -> None:
 # trade overlay helpers
 # -----------------------------
 def _extract_price_from_message(msg: str) -> Optional[float]:
+    # matches "... at 108000.00" or "... at 4320"
     m = re.search(r"\bat\s+([0-9]+(?:\.[0-9]+)?)\b", msg or "")
     if not m:
         return None
@@ -322,14 +363,12 @@ def _nearest_price_at_or_before(px: pd.DataFrame, ts: pd.Timestamp) -> Optional[
 
 
 def _build_trade_event_markers(
-    prices: pd.DataFrame,
-    events: pd.DataFrame,
-    asset_focus: str,
-    max_markers: int = 500,
+        prices: pd.DataFrame,
+        events: pd.DataFrame,
+        asset_focus: str,
+        max_markers: int = 500,
 ) -> pd.DataFrame:
-    """
-    markers_df columns: ts, product_id, event_type, message, y
-    """
+    # markers_df columns: ts, product_id, event_type, message, y
     if prices.empty or events.empty:
         return pd.DataFrame()
 
@@ -381,10 +420,10 @@ def _build_trade_event_markers(
 # render panels
 # -----------------------------
 def _render_status_rail(
-    prices: pd.DataFrame,
-    positions: pd.DataFrame,
-    last_tick: Optional[pd.Timestamp],
-    asset_focus: str,
+        prices: pd.DataFrame,
+        positions: pd.DataFrame,
+        last_tick: Optional[pd.Timestamp],
+        asset_focus: str,
 ) -> None:
     btc_last, btc_prev = _last_and_prev_price(prices, "BTC-USD")
     eth_last, eth_prev = _last_and_prev_price(prices, "ETH-USD")
@@ -432,17 +471,17 @@ def _render_status_rail(
         )
 
     st.markdown(
-        f"<div style='margin-top:6px; font-size:16px; color: rgba(255,255,255,0.72)'>asset focus: <b>{asset_focus}</b></div>",
+        f"<div style='margin-top:6px; font-size:16px; color:{THEME.text_muted}'>asset focus: <b>{asset_focus}</b></div>",
         unsafe_allow_html=True,
     )
 
 
 def _render_price_panel(
-    prices: pd.DataFrame,
-    events_for_overlay: pd.DataFrame,
-    asset_focus: str,
-    last_n_ticks: int,
-    show_trade_overlay: bool,
+        prices: pd.DataFrame,
+        events_for_overlay: pd.DataFrame,
+        asset_focus: str,
+        last_n_ticks: int,
+        show_trade_overlay: bool,
 ) -> None:
     st.subheader("price chart")
 
@@ -505,7 +544,8 @@ def _render_equity_panel(equity: pd.DataFrame) -> None:
     st.plotly_chart(fig_eq, config=PLOTLY_CONFIG)
 
 
-def _render_positions_panel(prices: pd.DataFrame, positions: pd.DataFrame, table_density: str, asset_focus: str) -> None:
+def _render_positions_panel(prices: pd.DataFrame, positions: pd.DataFrame, table_density: str,
+                            asset_focus: str) -> None:
     st.subheader("positions (with pnl)")
 
     if positions.empty:
@@ -628,16 +668,16 @@ def _frag_status(db_path: str, asset_focus: str) -> None:
 
 @fragment
 def _frag_overview(
-    db_path: str,
-    asset_focus: str,
-    last_n_ticks: int,
-    show_trade_overlay: bool,
-    table_density: str,
-    event_limit: int,
-    show_only_signal_events: bool,
-    levels_selected: Set[str],
-    event_types_selected: Set[str],
-    event_search: str,
+        db_path: str,
+        asset_focus: str,
+        last_n_ticks: int,
+        show_trade_overlay: bool,
+        table_density: str,
+        event_limit: int,
+        show_only_signal_events: bool,
+        levels_selected: Set[str],
+        event_types_selected: Set[str],
+        event_search: str,
 ) -> None:
     prices = load_price_ticks(db_path)
     positions = load_positions(db_path)
@@ -678,13 +718,13 @@ def _frag_overview(
 
 @fragment
 def _frag_events(
-    db_path: str,
-    asset_focus: str,
-    event_limit: int,
-    show_only_signal_events: bool,
-    levels_selected: Set[str],
-    event_types_selected: Set[str],
-    event_search: str,
+        db_path: str,
+        asset_focus: str,
+        event_limit: int,
+        show_only_signal_events: bool,
+        levels_selected: Set[str],
+        event_types_selected: Set[str],
+        event_search: str,
 ) -> None:
     events = load_events(db_path, limit=event_limit)
     events_filtered = _apply_events_filters(
@@ -732,6 +772,7 @@ def _frag_diagnostics(db_path: str) -> None:
 # -----------------------------
 def run_app() -> None:
     st.set_page_config(page_title=APP_TITLE, layout="wide")
+    _inject_global_css()
 
     st.title(APP_TITLE)
     st.caption("A dashboard to experiment with losing money while trading. Enjoy!")
