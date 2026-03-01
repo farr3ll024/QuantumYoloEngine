@@ -10,6 +10,8 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .cache/
+.pytype/
+.pyre/
 
 # -----------------------------
 # virtual environments
@@ -33,6 +35,8 @@ ENV/
 # logs
 # -----------------------------
 *.log
+logs/
+runtime/logs/
 
 # -----------------------------
 # local sqlite runtime db
@@ -44,14 +48,14 @@ paper_trader.db-*
 *.db
 *.db-wal
 *.db-shm
+runtime/db/
 
 # -----------------------------
 # streamlit (never commit secrets)
 # -----------------------------
 .streamlit/secrets.toml
 
-# (optional) if you want these committed, remove these ignores
-.streamlit/config.toml
+# streamlit caches / logs (keep config committed)
 .streamlit/cache/
 .streamlit/.cache/
 .streamlit/logs/
@@ -71,11 +75,13 @@ paper_trader.db-*
 # -----------------------------
 history.csv
 history_*.csv
+data/
 *.parquet
 *.feather
 
 # keep a small committed sample if you want:
 !history.sample.csv
+!data/.gitkeep
 
 # -----------------------------
 # build / packaging
@@ -83,9 +89,15 @@ history_*.csv
 build/
 dist/
 *.egg-info/
+.eggs/
+pip-wheel-metadata/
+*.whl
 
 # -----------------------------
 # misc / reports
 # -----------------------------
 coverage.xml
 htmlcov/
+.coverage
+coverage/
+reports/
