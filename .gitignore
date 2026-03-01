@@ -37,6 +37,7 @@ ENV/
 *.log
 logs/
 runtime/logs/
+runtime/engine/
 
 # -----------------------------
 # local sqlite runtime db

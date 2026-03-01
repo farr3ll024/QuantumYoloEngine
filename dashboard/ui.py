@@ -14,6 +14,8 @@ from streamlit_autorefresh import st_autorefresh
 
 from .constants import APP_TITLE
 from .db import clear_all_data, load_events, load_orders, load_positions, load_price_ticks
+from .engine_control import get_status as get_engine_status
+from .engine_control import start_engine, stop_engine
 from .metrics import (
     build_unrealized_pnl,
     compute_asset_pnl_rows,
@@ -24,6 +26,7 @@ from .metrics import (
 from .theme import THEME
 
 DEFAULT_DB_PATH = Path("runtime/db/paper_trader.db")
+DEFAULT_HISTORY_CSV = Path("data/history.csv")
 
 SIGNAL_EVENT_TYPES: Set[str] = {"entry_filled", "tp1_filled", "tp2_filled", "stop_filled", "stop_moved"}
 
@@ -65,7 +68,7 @@ def _inject_global_css() -> None:
           /* top header / toolbar */
           header[data-testid="stHeader"] {{
             background: {THEME.bg} !important;
-            border-bottom: 1px solid rgba(167,139,250,0.12) !important;
+            border-bottom: 1px solid rgba(167,139,250,0.10) !important;
           }}
           [data-testid="stToolbar"] {{
             background: {THEME.bg} !important;
@@ -79,9 +82,9 @@ def _inject_global_css() -> None:
             background: {THEME.panel} !important;
           }}
 
-          /* page width + spacing (more top padding so title doesn't crowd header) */
+          /* page width + spacing */
           .block-container {{
-            padding-top: 2.0rem;     /* increased from ~1.15rem */
+            padding-top: 2.0rem;
             padding-bottom: 2.25rem;
             max-width: 1440px;
           }}
@@ -96,19 +99,19 @@ def _inject_global_css() -> None:
 
           /* premium cards: applies to st.container(border=True) */
           div[data-testid="stVerticalBlockBorderWrapper"] {{
-            border: 1px solid {THEME.border} !important;
+            border: none !important;
             border-radius: 18px !important;
             background:
-              radial-gradient(1200px 600px at 20% 0%, rgba(167,139,250,0.16) 0%, rgba(0,0,0,0) 60%),
+              radial-gradient(1200px 600px at 20% 0%, rgba(167,139,250,0.14) 0%, rgba(0,0,0,0) 60%),
               linear-gradient(180deg, {THEME.panel} 0%, {THEME.panel2} 100%) !important;
             box-shadow:
               0 18px 45px rgba(0,0,0,0.38),
-              0 0 0 1px rgba(0,0,0,0.18) inset !important;
+              0 0 0 1px rgba(0,0,0,0.00) inset !important;
           }}
 
           /* make separators calmer */
           hr {{
-            border-color: rgba(167,139,250,0.12) !important;
+            border-color: rgba(167,139,250,0.10) !important;
           }}
 
           /* tabs: clean, no pill borders */
@@ -134,13 +137,7 @@ def _inject_global_css() -> None:
           div[data-testid="stDataFrame"] {{
             border-radius: 14px;
             overflow: hidden;
-            border: 1px solid {THEME.border};
-          }}
-
-          /* helper text style */
-          .qye-muted {{
-            color: {THEME.text_muted};
-            font-weight: 600;
+            border: none !important;
           }}
         </style>
         """,
@@ -256,14 +253,14 @@ def _apply_dark_plotly_theme(fig: go.Figure) -> None:
 
     fig.update_xaxes(
         showgrid=True,
-        gridcolor=THEME.border,
+        gridcolor="rgba(255,255,255,0.10)",
         zeroline=False,
         tickfont=dict(color=THEME.text_muted, size=11),
         title=dict(font=dict(color=THEME.text, size=12)),
     )
     fig.update_yaxes(
         showgrid=True,
-        gridcolor=THEME.border,
+        gridcolor="rgba(255,255,255,0.10)",
         zeroline=False,
         tickfont=dict(color=THEME.text_muted, size=11),
         title=dict(font=dict(color=THEME.text, size=12)),
@@ -420,6 +417,62 @@ def _build_trade_event_markers(
     return pd.DataFrame(rows)
 
 
+def _render_engine_panel() -> None:
+    st.sidebar.subheader("engine")
+
+    status = get_engine_status()
+    if status.get("running"):
+        st.sidebar.success(f"running (pid {status['pid']})")
+        st.sidebar.caption(f"started: {status['started_at_utc']}")
+        if st.sidebar.button("stop engine", type="primary", use_container_width=True):
+            res = stop_engine()
+            if res.get("ok"):
+                st.sidebar.success(res.get("message", "stopped"))
+                st.rerun()
+            else:
+                st.sidebar.error(res.get("message", "failed to stop"))
+    else:
+        st.sidebar.warning("stopped")
+
+        mode = st.sidebar.selectbox(
+            "run mode",
+            ["demo (rich)", "demo (console)", "csv replay (rich)"],
+            index=0,
+        )
+
+        # always pin db/log to runtime paths
+        base = ["--db", str(DEFAULT_DB_PATH)]
+
+        if mode == "demo (rich)":
+            args = [*base, "--feed", "demo", "--ui", "rich"]
+        elif mode == "demo (console)":
+            args = [*base, "--feed", "demo", "--ui", "console"]
+        else:
+            args = [
+                *base,
+                "--feed",
+                "csv",
+                "--history-csv",
+                str(DEFAULT_HISTORY_CSV),
+                "--replay",
+                "--speed",
+                "600",
+                "--loop",
+                "--ui",
+                "rich",
+            ]
+
+        if st.sidebar.button("start engine", type="primary", use_container_width=True):
+            res = start_engine(args)
+            if res.get("ok"):
+                st.sidebar.success(f"started (pid {res['pid']})")
+                st.rerun()
+            else:
+                st.sidebar.error(res.get("message", "failed to start"))
+
+    st.sidebar.divider()
+
+
 def _render_status_rail(
         prices: pd.DataFrame,
         positions: pd.DataFrame,
@@ -433,7 +486,29 @@ def _render_status_rail(
     eth_d, eth_pct = _delta_and_pct(eth_last, eth_prev)
 
     total_realized = float(positions["realized_pnl"].sum()) if not positions.empty else 0.0
-    total_unreal = build_unrealized_pnl(positions, btc_last, eth_last)
+
+    def build_unrealized() -> float:
+        if positions.empty:
+            return 0.0
+        out = 0.0
+        for _, row in positions.iterrows():
+            pid = str(row.get("product_id") or "")
+            qty = float(row.get("base_qty") or 0.0)
+            avg = float(row.get("avg_entry") or 0.0)
+            if qty <= 0:
+                continue
+            if pid == "BTC-USD":
+                px = btc_last
+            elif pid == "ETH-USD":
+                px = eth_last
+            else:
+                px = None
+            if px is None:
+                continue
+            out += (float(px) - avg) * qty
+        return float(out)
+
+    total_unreal = build_unrealized()
     total_pnl = total_realized + total_unreal
 
     last_tick_dt = _safe_dt(last_tick)
@@ -487,7 +562,7 @@ def _render_price_panel(
     st.subheader("price chart")
 
     if prices.empty:
-        st.info("no price ticks yet. run the trader first.")
+        st.info("no price ticks yet. start the engine from the sidebar.")
         return
 
     df = prices.copy()
@@ -761,10 +836,12 @@ def run_app() -> None:
     st.set_page_config(page_title=APP_TITLE, layout="wide")
     _inject_global_css()
 
-    # a more professional "hero header" section that gives breathing room
     with st.container():
         st.title(APP_TITLE)
         st.caption("A dashboard to experiment with losing money while trading. Enjoy!")
+    st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
+
+    _render_engine_panel()
 
     st.sidebar.subheader("controls")
 
