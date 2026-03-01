@@ -2,6 +2,7 @@ pyyaml
 rich
 streamlit
 streamlit-autorefresh
+streamlit-plotly-events
 pandas
 plotly
 requests

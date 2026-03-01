@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
-from typing import Optional, Set, Callable, Any
+from typing import Optional, Set, Callable, Any, Tuple, Dict
 
 import pandas as pd
 import plotly.express as plotly_express
@@ -30,6 +30,15 @@ PLOTLY_CONFIG = {
     "displayModeBar": True,  # keep toolbar available
     "scrollZoom": True,
     "responsive": True,
+}
+
+# event marker colors (dark theme friendly)
+EVENT_COLORS: Dict[str, str] = {
+    "entry_filled": "#34d399",  # green
+    "tp1_filled": "#60a5fa",  # blue
+    "tp2_filled": "#a78bfa",  # purple
+    "stop_filled": "#f87171",  # red
+    "stop_moved": "#fbbf24",  # amber
 }
 
 # -----------------------------
@@ -79,6 +88,110 @@ def _format_seconds(s: Optional[float]) -> str:
     if s < 3600:
         return f"{s/60:.1f}m"
     return f"{s/3600:.2f}h"
+
+
+def _pnl_color(value: float) -> str:
+    if value > 0:
+        return "#16a34a"  # green
+    if value < 0:
+        return "#dc2626"  # red
+    return "#6b7280"  # gray
+
+
+def _colored_money(value: float, font_px: int = 20) -> str:
+    color = _pnl_color(value)
+    sign = "" if value < 0 else "+"
+    return f"<span style='color:{color}; font-weight:800; font-size:{font_px}px; line-height:1.1'>{sign}{format_usd(value)}</span>"
+
+
+def _label(text: str, font_px: int = 14) -> str:
+    return f"<div style='font-size:{font_px}px; font-weight:700; color: rgba(255,255,255,0.72); margin-bottom:4px'>{text}</div>"
+
+
+def _last_and_prev_price(prices: pd.DataFrame, product_id: str) -> Tuple[Optional[float], Optional[float]]:
+    """
+    Returns (last_price, prev_price) for product_id based on ts ordering.
+    """
+    if prices.empty or "product_id" not in prices.columns:
+        return None, None
+
+    df = prices[prices["product_id"] == product_id]
+    if df.empty or "ts" not in df.columns or "price" not in df.columns:
+        return None, None
+
+    df = df.sort_values("ts")
+    last_row = df.iloc[-1]
+    last_px = float(last_row["price"]) if pd.notna(last_row["price"]) else None
+
+    if len(df) < 2:
+        return last_px, None
+
+    prev_row = df.iloc[-2]
+    prev_px = float(prev_row["price"]) if pd.notna(prev_row["price"]) else None
+    return last_px, prev_px
+
+
+def _delta_and_pct(last_px: Optional[float], prev_px: Optional[float]) -> Tuple[Optional[float], Optional[float]]:
+    if last_px is None or prev_px is None:
+        return None, None
+    if prev_px == 0:
+        return None, None
+    d = last_px - prev_px
+    pct = (d / prev_px) * 100.0
+    return d, pct
+
+
+# -----------------------------
+# plotly theme helpers
+# -----------------------------
+def _apply_dark_plotly_theme(fig: go.Figure) -> None:
+    """
+    Makes plotly charts dark without relying on global templates.
+    Also forces a non-black colorway so lines/markers stay visible.
+    """
+    fig.update_layout(
+        paper_bgcolor="#0b1220",
+        plot_bgcolor="#0b1220",
+        font=dict(color="rgba(255,255,255,0.88)"),
+        legend=dict(
+            bgcolor="rgba(0,0,0,0)",
+            borderwidth=0,
+            font=dict(color="rgba(255,255,255,0.85)"),
+        ),
+        margin=dict(l=60, r=20, t=40, b=60),
+        hovermode="x unified",
+        hoverlabel=dict(bgcolor="rgba(15,23,42,0.95)", font=dict(color="white")),
+    )
+
+    # axis styling (no titlefont; use title=dict(font=...) in modern plotly)
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor="rgba(148,163,184,0.18)",
+        zeroline=False,
+        tickfont=dict(color="rgba(255,255,255,0.78)", size=11),
+        title=dict(font=dict(color="rgba(255,255,255,0.85)", size=12)),
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor="rgba(148,163,184,0.18)",
+        zeroline=False,
+        tickfont=dict(color="rgba(255,255,255,0.78)", size=11),
+        title=dict(font=dict(color="rgba(255,255,255,0.85)", size=12)),
+    )
+
+    # IMPORTANT: force readable series colors on dark background
+    fig.update_layout(
+        colorway=[
+            "#60a5fa",  # blue
+            "#a78bfa",  # purple
+            "#34d399",  # green
+            "#fbbf24",  # amber
+            "#f87171",  # red
+            "#22d3ee",  # cyan
+            "#fb7185",  # rose
+            "#cbd5e1",  # slate
+        ]
+    )
 
 
 # -----------------------------
@@ -186,7 +299,6 @@ def _extract_price_from_message(msg: str) -> Optional[float]:
 def _nearest_price_at_or_before(px: pd.DataFrame, ts: pd.Timestamp) -> Optional[float]:
     if px.empty or "ts" not in px.columns or "price" not in px.columns:
         return None
-    # px must be sorted ascending by ts
     i = px["ts"].searchsorted(ts, side="right") - 1
     if i < 0:
         return None
@@ -253,12 +365,20 @@ def _build_trade_event_markers(
 # -----------------------------
 # render panels
 # -----------------------------
-def _render_status_rail(prices: pd.DataFrame, positions: pd.DataFrame, last_tick: Optional[pd.Timestamp], asset_focus: str) -> None:
-    btc_price = latest_price(prices, "BTC-USD")
-    eth_price = latest_price(prices, "ETH-USD")
+def _render_status_rail(
+    prices: pd.DataFrame,
+    positions: pd.DataFrame,
+    last_tick: Optional[pd.Timestamp],
+    asset_focus: str,
+) -> None:
+    btc_last, btc_prev = _last_and_prev_price(prices, "BTC-USD")
+    eth_last, eth_prev = _last_and_prev_price(prices, "ETH-USD")
+
+    btc_d, btc_pct = _delta_and_pct(btc_last, btc_prev)
+    eth_d, eth_pct = _delta_and_pct(eth_last, eth_prev)
 
     total_realized = float(positions["realized_pnl"].sum()) if not positions.empty else 0.0
-    total_unreal = build_unrealized_pnl(positions, btc_price, eth_price)
+    total_unreal = build_unrealized_pnl(positions, btc_last, eth_last)
     total_pnl = total_realized + total_unreal
 
     last_tick_dt = _safe_dt(last_tick)
@@ -266,15 +386,40 @@ def _render_status_rail(prices: pd.DataFrame, positions: pd.DataFrame, last_tick
     if last_tick_dt is not None:
         age_s = max(0.0, (_utc_now() - last_tick_dt).total_seconds())
 
-    c1, c2, c3, c4, c5, c6 = st.columns([1, 1, 1, 1, 1, 1])
-    c1.metric("btc", f"${btc_price:,.2f}" if btc_price is not None else "-")
-    c2.metric("eth", f"${eth_price:,.2f}" if eth_price is not None else "-")
-    c3.metric("realized", format_usd(total_realized))
-    c4.metric("unrealized", format_usd(total_unreal))
-    c5.metric("total pnl", format_usd(total_pnl))
-    c6.metric("last tick age", _format_seconds(age_s))
+    c1, c2, c3, c4, c5, c6 = st.columns([1.15, 1.15, 1, 1, 1, 1])
 
-    st.caption(f"asset focus: **{asset_focus}**")
+    btc_value = f"${btc_last:,.2f}" if btc_last is not None else "-"
+    eth_value = f"${eth_last:,.2f}" if eth_last is not None else "-"
+
+    btc_delta = "-" if btc_d is None or btc_pct is None else f"{btc_d:+,.2f} ({btc_pct:+.2f}%)"
+    eth_delta = "-" if eth_d is None or eth_pct is None else f"{eth_d:+,.2f} ({eth_pct:+.2f}%)"
+
+    c1.metric("btc", btc_value, delta=btc_delta, delta_color="normal")
+    c2.metric("eth", eth_value, delta=eth_delta, delta_color="normal")
+
+    with c3:
+        st.markdown(_label("realized", font_px=15), unsafe_allow_html=True)
+        st.markdown(_colored_money(total_realized, font_px=22), unsafe_allow_html=True)
+
+    with c4:
+        st.markdown(_label("unrealized", font_px=15), unsafe_allow_html=True)
+        st.markdown(_colored_money(total_unreal, font_px=22), unsafe_allow_html=True)
+
+    with c5:
+        st.markdown(_label("total pnl", font_px=15), unsafe_allow_html=True)
+        st.markdown(_colored_money(total_pnl, font_px=22), unsafe_allow_html=True)
+
+    with c6:
+        st.markdown(_label("last tick age", font_px=15), unsafe_allow_html=True)
+        st.markdown(
+            f"<div style='font-size:22px; font-weight:800; line-height:1.1'>{_format_seconds(age_s)}</div>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        f"<div style='margin-top:6px; font-size:16px; color: rgba(255,255,255,0.72)'>asset focus: <b>{asset_focus}</b></div>",
+        unsafe_allow_html=True,
+    )
 
 
 def _render_price_panel(
@@ -299,7 +444,7 @@ def _render_price_panel(
     df = _apply_asset_focus(df, asset_focus)
 
     fig = plotly_express.line(df, x="ts", y="price", color="product_id")
-    fig.update_layout(height=420, margin=dict(l=10, r=10, t=30, b=10), legend_title_text="")
+    fig.update_layout(height=420, legend_title_text="")
 
     if show_trade_overlay and not events_for_overlay.empty:
         markers = _build_trade_event_markers(
@@ -312,6 +457,7 @@ def _render_price_panel(
         if not markers.empty:
             for event_type in sorted(markers["event_type"].unique().tolist()):
                 m = markers[markers["event_type"] == event_type]
+                color = EVENT_COLORS.get(event_type, "#cbd5e1")
                 fig.add_trace(
                     go.Scatter(
                         x=m["ts"],
@@ -323,10 +469,16 @@ def _render_price_panel(
                             lambda r: f"{r['product_id']} • {r['event_type']} • {r['message']}",
                             axis=1,
                         ),
-                        marker=dict(size=10, symbol="circle"),
+                        marker=dict(
+                            size=11,
+                            symbol="circle",
+                            color=color,
+                            line=dict(width=0),
+                        ),
                     )
                 )
 
+    _apply_dark_plotly_theme(fig)
     st.plotly_chart(fig, config=PLOTLY_CONFIG)
 
 
@@ -338,7 +490,8 @@ def _render_equity_panel(equity: pd.DataFrame) -> None:
         return
 
     fig_eq = plotly_express.line(equity, x="ts", y="equity")
-    fig_eq.update_layout(height=260, margin=dict(l=10, r=10, t=30, b=10), yaxis_title="pnl ($)")
+    fig_eq.update_layout(height=260, yaxis_title="pnl ($)")
+    _apply_dark_plotly_theme(fig_eq)
     st.plotly_chart(fig_eq, config=PLOTLY_CONFIG)
 
 
@@ -425,13 +578,6 @@ def _render_events_panel(events: pd.DataFrame) -> None:
         width="stretch",
         hide_index=True,
         disabled=True,
-        column_config={
-            "ts": st.column_config.TextColumn("time", width="medium"),
-            "level": st.column_config.TextColumn("lvl", width="small"),
-            "product_id": st.column_config.TextColumn("asset", width="small"),
-            "event_type": st.column_config.TextColumn("type", width="medium"),
-            "message": st.column_config.TextColumn("message", width="large"),
-        },
         height=620,
     )
 
@@ -448,19 +594,6 @@ def _render_orders_panel(orders: pd.DataFrame) -> None:
         width="stretch",
         hide_index=True,
         disabled=True,
-        column_config={
-            "order_id": st.column_config.TextColumn("order id", width="large"),
-            "product_id": st.column_config.TextColumn("asset", width="small"),
-            "order_type": st.column_config.TextColumn("type", width="small"),
-            "rule_id": st.column_config.TextColumn("rule", width="small"),
-            "side": st.column_config.TextColumn("side", width="small"),
-            "price": money_col("price"),
-            "quote_size_usd": money_col("quote size"),
-            "base_size": qty_col("base size"),
-            "status": st.column_config.TextColumn("status", width="small"),
-            "created_at": st.column_config.TextColumn("created", width="medium"),
-            "filled_at": st.column_config.TextColumn("filled", width="medium"),
-        },
         height=620,
     )
 
@@ -475,10 +608,6 @@ def _run_every(refresh_sec: int) -> Optional[dt.timedelta]:
 
 
 def _with_run_every(fn: Callable[..., Any], refresh_sec: int) -> Callable[..., Any]:
-    """
-    Creates a run_every-wrapped fragment function WITHOUT reassigning the original
-    (avoids linter warnings about shadowing).
-    """
     if not _HAS_FRAGMENTS:
         return fn
     base = getattr(fn, "__wrapped__", fn)
@@ -589,24 +718,6 @@ def _frag_diagnostics(db_path: str) -> None:
 
     with st.container(border=True):
         st.subheader("diagnostics")
-
-        if prices.empty or "ts" not in prices.columns:
-            st.info("no price ticks loaded yet.")
-        else:
-            ts = prices[["ts"]].drop_duplicates().sort_values("ts")["ts"]
-            if len(ts) < 2:
-                st.info("not enough ticks to compute delta stats.")
-            else:
-                deltas = ts.diff().dropna().dt.total_seconds()
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("unique ticks", f"{len(ts):,}")
-                c2.metric("median tick delta", _format_seconds(float(deltas.median())))
-                c3.metric("min tick delta", _format_seconds(float(deltas.min())))
-                c4.metric("max tick delta", _format_seconds(float(deltas.max())))
-
-        st.divider()
-
-        st.caption("latest row counts")
         st.write(
             {
                 "prices_rows": int(len(prices)),
@@ -615,13 +726,6 @@ def _frag_diagnostics(db_path: str) -> None:
                 "positions_rows": int(len(positions)),
             }
         )
-
-        st.caption("event type counts (top 10)")
-        if events.empty:
-            st.write("-")
-        else:
-            counts = events["event_type"].value_counts().head(10)
-            st.dataframe(counts, width="stretch")
 
 
 # -----------------------------
@@ -633,7 +737,6 @@ def run_app() -> None:
     st.title(APP_TITLE)
     st.caption("A dashboard to experiment with losing money while trading. Enjoy!")
 
-    # --- sidebar: controls ---
     st.sidebar.subheader("controls")
 
     db_path = st.sidebar.text_input("sqlite db path", value=DB_PATH_DEFAULT)
@@ -693,33 +796,24 @@ def run_app() -> None:
 
     render_dev_tools(db_path)
 
-    # ==========================================================
-    # refresh strategy
-    # - preferred: fragments with run_every (updates in-place; less scroll/jank)
-    # - fallback: st_autorefresh (older streamlit)
-    # ==========================================================
     if auto_refresh and not _HAS_FRAGMENTS:
         st_autorefresh(interval=refresh_sec * 1000, key="paper_trader_refresh")
 
-    # create "live" wrappers WITHOUT reassigning the original names (avoids shadow warnings)
     frag_status_live = _with_run_every(_frag_status, refresh_sec) if auto_refresh else _frag_status
     frag_overview_live = _with_run_every(_frag_overview, refresh_sec) if auto_refresh else _frag_overview
     frag_events_live = _with_run_every(_frag_events, refresh_sec) if auto_refresh else _frag_events
     frag_orders_live = _with_run_every(_frag_orders, refresh_sec) if auto_refresh else _frag_orders
     frag_diagnostics_live = _with_run_every(_frag_diagnostics, refresh_sec) if auto_refresh else _frag_diagnostics
 
-    # stable layout scaffolding (tabs/headers/etc)
+    frag_status_live(db_path=db_path, asset_focus=asset_focus)
+
+    st.divider()
+
     tab_names = ["overview", "events", "diagnostics"]
     if show_orders:
         tab_names.insert(1, "orders")
     tabs = st.tabs(tab_names)
 
-    # -------- status rail (top) --------
-    frag_status_live(db_path=db_path, asset_focus=asset_focus)
-
-    st.divider()
-
-    # -------- overview --------
     with tabs[0]:
         frag_overview_live(
             db_path=db_path,
@@ -734,7 +828,6 @@ def run_app() -> None:
             event_search=event_search,
         )
 
-    # -------- orders (optional) --------
     if show_orders:
         with tabs[1]:
             frag_orders_live(db_path=db_path, asset_focus=asset_focus)
@@ -744,7 +837,6 @@ def run_app() -> None:
         events_tab = tabs[1]
         diag_tab = tabs[2]
 
-    # -------- events --------
     with events_tab:
         frag_events_live(
             db_path=db_path,
@@ -756,6 +848,5 @@ def run_app() -> None:
             event_search=event_search,
         )
 
-    # -------- diagnostics --------
     with diag_tab:
         frag_diagnostics_live(db_path=db_path)

@@ -99,17 +99,17 @@ def _events_has_payload_json(conn: sqlite3.Connection) -> bool:
 def load_events(db_path: str, limit: int = 200) -> pd.DataFrame:
     conn = get_conn(db_path)
 
-    # pull payload_json if the column exists (optional, but super useful for tooltips later)
+    # include the primary key so we can deep-link reliably from chart clicks
     if _events_has_payload_json(conn):
         q = f"""
-            select ts, level, product_id, event_type, message, payload_json
+            select id as event_id, ts, level, product_id, event_type, message, payload_json
             from events
             order by id desc
             limit {int(limit)}
         """
     else:
         q = f"""
-            select ts, level, product_id, event_type, message
+            select id as event_id, ts, level, product_id, event_type, message
             from events
             order by id desc
             limit {int(limit)}
@@ -119,6 +119,7 @@ def load_events(db_path: str, limit: int = 200) -> pd.DataFrame:
     if not df.empty:
         df["ts"] = parse_ts_series(df["ts"])
         df = df.dropna(subset=["ts"])
+        # sort newest-first for tables, but note we can sort ascending when needed
         df = df.sort_values("ts", ascending=False)
     return df
 
