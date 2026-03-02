@@ -1,4 +1,3 @@
-# dashboard/metrics.py
 from __future__ import annotations
 
 from typing import Optional
@@ -9,9 +8,14 @@ import pandas as pd
 def latest_price(df_prices: pd.DataFrame, product_id: str) -> Optional[float]:
     if df_prices.empty:
         return None
+
     rows = df_prices[df_prices["product_id"] == product_id]
     if rows.empty:
         return None
+
+    if "ts" in rows.columns:
+        rows = rows.sort_values("ts")
+
     return float(rows.iloc[-1]["price"])
 
 

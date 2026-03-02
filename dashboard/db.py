@@ -1,4 +1,3 @@
-# dashboard/db.py
 from __future__ import annotations
 
 import sqlite3
@@ -14,6 +13,13 @@ from .parsing import parse_ts_series
 def get_conn(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+
+    # reader-friendly pragmas (no behavior change; helps avoid "database is locked")
+    try:
+        conn.execute("pragma busy_timeout=2000;")
+    except Exception:
+        pass
+
     return conn
 
 
@@ -36,8 +42,8 @@ def load_price_ticks(db_path: str) -> pd.DataFrame:
     q = """
         select ts, product_id, price
         from price_ticks
-        order by id asc
-    """
+        order by id asc \
+        """
     df = pd.read_sql_query(q, conn)
     if not df.empty:
         df["ts"] = parse_ts_series(df["ts"])
@@ -60,8 +66,8 @@ def load_positions(db_path: str) -> pd.DataFrame:
                stop_done,
                updated_at
         from positions
-        order by product_id
-    """
+        order by product_id \
+        """
     return pd.read_sql_query(q, conn)
 
 
@@ -81,8 +87,8 @@ def load_orders(db_path: str) -> pd.DataFrame:
                created_at,
                filled_at
         from orders
-        order by created_at desc
-    """
+        order by created_at desc \
+        """
     return pd.read_sql_query(q, conn)
 
 
@@ -98,43 +104,31 @@ def _events_has_payload_json(conn: sqlite3.Connection) -> bool:
 @st.cache_data(ttl=2, show_spinner=False)
 def load_events(db_path: str, limit: int = 200) -> pd.DataFrame:
     conn = get_conn(db_path)
+    limit_i = max(1, min(int(limit), 50_000))
 
-    # include the primary key so we can deep-link reliably from chart clicks
     if _events_has_payload_json(conn):
-        q = f"""
+        q = """
             select id as event_id, ts, level, product_id, event_type, message, payload_json
             from events
-            order by id desc
-            limit {int(limit)}
-        """
+            order by id desc limit ? \
+            """
     else:
-        q = f"""
+        q = """
             select id as event_id, ts, level, product_id, event_type, message
             from events
-            order by id desc
-            limit {int(limit)}
-        """
+            order by id desc limit ? \
+            """
 
-    df = pd.read_sql_query(q, conn)
+    df = pd.read_sql_query(q, conn, params=(limit_i,))
     if not df.empty:
         df["ts"] = parse_ts_series(df["ts"])
         df = df.dropna(subset=["ts"])
-        # sort newest-first for tables, but note we can sort ascending when needed
         df = df.sort_values("ts", ascending=False)
     return df
 
 
 @st.cache_data(ttl=2, show_spinner=False)
 def load_db_health(db_path: str) -> Dict[str, Any]:
-    """
-    lightweight diagnostics to help answer:
-      - is the db readable?
-      - are tables present?
-      - are ticks/events/orders being written?
-      - what is the most recent timestamp in each table?
-
-    returns a dict so the UI can render it however it wants.
-    """
     conn = get_conn(db_path)
     cur = conn.cursor()
 
@@ -184,7 +178,8 @@ def load_db_health(db_path: str) -> Dict[str, Any]:
 
     if "orders" in health["tables"]:
         health["latest"]["orders.created_at"] = _safe_scalar("select max(created_at) from orders")
-        health["latest"]["orders.filled_at"] = _safe_scalar("select max(filled_at) from orders where filled_at is not null")
+        health["latest"]["orders.filled_at"] = _safe_scalar(
+            "select max(filled_at) from orders where filled_at is not null")
 
     if "positions" in health["tables"]:
         health["latest"]["positions.updated_at"] = _safe_scalar("select max(updated_at) from positions")

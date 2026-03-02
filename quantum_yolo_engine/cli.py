@@ -103,7 +103,7 @@ def main() -> None:
 
     parser.add_argument("--no-breakeven-stop", action="store_true", help="do not move stop to breakeven after tp1")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
-    parser.add_argument("--summary-every", type=int, default=10, help="console summary interval in console ui mode")
+    parser.add_argument("--summary-every", type=int, default=10, help="console summary interval in console ui_parts mode")
     parser.add_argument("--ui", choices=["console", "rich"], default="rich", help="display mode")
     parser.add_argument("--quiet", action="store_true", help="minimal console logging")
     args = parser.parse_args()
@@ -138,7 +138,7 @@ def main() -> None:
     console = Console(theme=RICH_THEME)
 
     logger.info("starting QuantumYoloEngine paper trader")
-    logger.info("config=%s | db=%s | feed=%s | ui=%s", str(config_path), str(db_path), args.feed, args.ui)
+    logger.info("config=%s | db=%s | feed=%s | ui_parts=%s", str(config_path), str(db_path), args.feed, args.ui)
 
     try:
         if args.feed == "csv":
