@@ -608,9 +608,23 @@ def _render_price_panel(
         fig.update_layout(height=420, legend_title_text="")
 
     if show_trade_overlay and not events_for_overlay.empty:
+        # Keep overlay markers inside the visible chart window.
+        if "ts" in df.columns and not df.empty and df["ts"].notna().any():
+            t_min = df["ts"].min()
+            t_max = df["ts"].max()
+
+            ev = events_for_overlay.copy()
+            if "ts" in ev.columns:
+                ev = ev.dropna(subset=["ts"])
+                ev = ev[(ev["ts"] >= t_min) & (ev["ts"] <= t_max)]
+            else:
+                ev = events_for_overlay
+        else:
+            ev = events_for_overlay
+
         markers = _build_trade_event_markers(
             prices=df,
-            events=events_for_overlay,
+            events=ev,
             asset_focus=asset_focus,
             max_markers=500,
         )
