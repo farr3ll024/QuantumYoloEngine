@@ -83,8 +83,8 @@ def main() -> None:
     parser.add_argument(
         "--speed",
         type=float,
-        default=60.0,
-        help="replay speed: 60 means 60x faster than real time (csv feed)",
+        default=120.0,
+        help="replay speed: 120 means 120x faster than real time (csv feed)",
     )
 
     # csv looping

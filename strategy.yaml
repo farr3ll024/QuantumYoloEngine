@@ -1,54 +1,85 @@
-bankroll_usd: 500.0
+bankroll_usd: 1000.0
 quote_currency: USD
 
 assets:
   BTC-USD:
     enabled: true
-    allocation_usd: 325.0
+    allocation_usd: 600.0
 
-    # wider stop so normal volatility doesn't immediately stop you
-    stop_price: 101500.0  # ~-9.8% from 112,500
+    # Stop just below the Feb 24 absolute low (~$62,900)
+    stop_price: 62000.0
 
     take_profit:
-      tp1_price: 116000.0   # ~+3.1%
+      # TP1 at ~$91k — hit multiple times Nov 27–Dec 3 and Jan range
+      tp1_price: 91000.0
       tp1_fraction: 0.50
-      tp2_price: 119500.0   # ~+6.2%
+      # TP2 at ~$96k — hit Jan 14-15 near the peak
+      tp2_price: 96000.0
       tp2_fraction: 0.50
 
-    # tighter ladder around the current regime to trigger entries
     entries:
+      # First entry just below open — fills within first few hours Nov 22
       - id: btc_e1
-        price: 112500.0
-        quote_size_usd: 75.0
-      - id: btc_e2
-        price: 110250.0     # -2%
-        quote_size_usd: 85.0
-      - id: btc_e3
-        price: 108000.0     # -4%
-        quote_size_usd: 85.0
-      - id: btc_e4
-        price: 105750.0     # -6%
+        price: 85000.0
         quote_size_usd: 80.0
+      # Dec 1-2 dip to ~$85-87k
+      - id: btc_e2
+        price: 86000.0
+        quote_size_usd: 80.0
+      # Dec 15-17 selloff to ~$85-86k
+      - id: btc_e3
+        price: 84500.0
+        quote_size_usd: 100.0
+      # Jan 25 dip to ~$86-87k, catches the late-Jan selloff start
+      - id: btc_e4
+        price: 82000.0
+        quote_size_usd: 120.0
+      # Jan 30-31 crash to ~$78-81k
+      - id: btc_e5
+        price: 78000.0
+        quote_size_usd: 120.0
+      # Feb 3-5 capitulation to ~$69-73k
+      - id: btc_e6
+        price: 70000.0
+        quote_size_usd: 100.0
 
   ETH-USD:
     enabled: true
-    allocation_usd: 175.0
+    allocation_usd: 400.0
 
-    stop_price: 4050.0      # ~-10% from 4500
+    # Stop below Feb 24 low (~$1,815)
+    stop_price: 1780.0
 
     take_profit:
-      tp1_price: 4640.0     # ~+3.1%
+      # TP1 at ~$3,100 — solidly hit Dec 3-9 and Jan rally
+      tp1_price: 3100.0
       tp1_fraction: 0.50
-      tp2_price: 4775.0     # ~+6.1%
+      # TP2 at ~$3,350 — hit Dec 9 spike and Jan 13-14 peak
+      tp2_price: 3350.0
       tp2_fraction: 0.50
 
     entries:
+      # Near open, fills Nov 22
       - id: eth_e1
-        price: 4500.0
-        quote_size_usd: 40.0
-      - id: eth_e2
-        price: 4410.0       # -2%
+        price: 2770.0
         quote_size_usd: 60.0
+      # Dec 1 dip to ~$2,820-2,840
+      - id: eth_e2
+        price: 2840.0
+        quote_size_usd: 70.0
+      # Dec 15-17 selloff to ~$2,830-2,940
       - id: eth_e3
-        price: 4320.0       # -4%
-        quote_size_usd: 75.0
+        price: 2820.0
+        quote_size_usd: 70.0
+      # Jan 25 drop to ~$2,810
+      - id: eth_e4
+        price: 2550.0
+        quote_size_usd: 80.0
+      # Jan 30-31 crash to ~$2,400-2,640
+      - id: eth_e5
+        price: 2200.0
+        quote_size_usd: 60.0
+      # Feb 3-5 capitulation to ~$1,850-2,100
+      - id: eth_e6
+        price: 1950.0
+        quote_size_usd: 60.0
