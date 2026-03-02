@@ -103,7 +103,8 @@ def main() -> None:
 
     parser.add_argument("--no-breakeven-stop", action="store_true", help="do not move stop to breakeven after tp1")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
-    parser.add_argument("--summary-every", type=int, default=10, help="console summary interval in console ui_parts mode")
+    parser.add_argument("--summary-every", type=int, default=10,
+                        help="console summary interval in console ui_parts mode")
     parser.add_argument("--ui", choices=["console", "rich"], default="rich", help="display mode")
     parser.add_argument("--quiet", action="store_true", help="minimal console logging")
     args = parser.parse_args()
@@ -132,6 +133,7 @@ def main() -> None:
         strategies=strategies,
         logger=logger,
         move_stop_to_breakeven_after_tp1=not args.no_breakeven_stop,
+        strategy_source_path=str(config_path),
     )
     trader.bootstrap()
 

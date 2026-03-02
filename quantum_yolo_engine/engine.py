@@ -1,7 +1,8 @@
-# quantum_yolo_engine/engine.py
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import json
 import logging
 from typing import Dict
 
@@ -16,21 +17,78 @@ class PaperTrader:
             strategies: Dict[str, AssetStrategy],
             logger: logging.Logger,
             move_stop_to_breakeven_after_tp1: bool = True,
+            strategy_source_path: str | None = None,
     ):
         self.store = store
         self.strategies = strategies
         self.logger = logger
         self.move_stop_to_breakeven_after_tp1 = move_stop_to_breakeven_after_tp1
+        self.strategy_source_path = strategy_source_path
 
         # prevents "enter and stop out on the same tick" behavior. this can happen
         # in csv replay or tight stops when the stop condition is evaluated on the
         # same timestamp as the entry fill.
         self._last_entry_ts_by_product: Dict[str, str] = {}
 
+    def _log_strategy_loaded(self, ts_iso: str) -> None:
+        """
+        Persist a strategy fingerprint + snapshot into the events table so reports can
+        attribute outcomes to the exact strategy revision used for this engine run.
+        """
+        try:
+            # build a stable json snapshot from the in-memory strategies
+            assets: dict[str, dict] = {}
+            for product_id, strat in self.strategies.items():
+                assets[product_id] = {
+                    "enabled": bool(strat.enabled),
+                    "allocation_usd": float(strat.allocation_usd),
+                    "stop_price": float(strat.stop_price),
+                    "take_profit": {
+                        "tp1_price": float(strat.take_profit.tp1_price),
+                        "tp1_fraction": float(strat.take_profit.tp1_fraction),
+                        "tp2_price": float(strat.take_profit.tp2_price),
+                        "tp2_fraction": float(strat.take_profit.tp2_fraction),
+                    },
+                    "entries": [
+                        {"id": str(e.id), "price": float(e.price), "quote_size_usd": float(e.quote_size_usd)}
+                        for e in (strat.entries or [])
+                    ],
+                }
+
+            snapshot = {
+                "strategy_source_path": self.strategy_source_path,
+                "generated_at_utc": ts_iso,
+                "assets": assets,
+            }
+
+            snapshot_text = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
+            strategy_hash = hashlib.sha256(snapshot_text.encode("utf-8")).hexdigest()
+
+            self.store.log_event(
+                level="info",
+                event_type="strategy_loaded",
+                message=f"strategy loaded (sha256={strategy_hash[:12]}…)",
+                product_id=None,
+                payload={
+                    "sha256": strategy_hash,
+                    "strategy_source_path": self.strategy_source_path,
+                    "snapshot": snapshot,  # stored as json via store.log_event
+                },
+                ts_iso=ts_iso,
+            )
+
+            self.logger.info("strategy_loaded | sha256=%s | path=%s", strategy_hash[:12], self.strategy_source_path)
+        except Exception as ex:
+            # never block trading because reporting metadata failed
+            self.logger.warning("failed to log strategy_loaded event: %s", ex)
+
     def bootstrap(self) -> None:
         now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
 
         with self.store.transaction():
+            # log strategy fingerprint once per engine start
+            self._log_strategy_loaded(now_iso)
+
             for product_id, strat in self.strategies.items():
                 if not strat.enabled:
                     continue
@@ -60,8 +118,13 @@ class PaperTrader:
                             base_size=None,
                             ts_iso=now_iso,
                         )
-                    self.store.log_event("info", "seed_entries", "seeded entry ladder orders", product_id,
-                                         ts_iso=now_iso)
+                    self.store.log_event(
+                        "info",
+                        "seed_entries",
+                        "seeded entry ladder orders",
+                        product_id,
+                        ts_iso=now_iso,
+                    )
                     self.logger.info("%s seeded %s entry orders", product_id, len(strat.entries))
 
     def on_price_tick(self, ts: dt.datetime, prices: PriceSnapshot) -> None:
