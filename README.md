@@ -32,9 +32,22 @@ bash
 ./scripts/setup.sh
 source .venv/bin/activate
 ```
-### 2) Run the trader (demo feed)
+### 2) Run the trader
 
-This runs a short demo price feed and writes ticks/events/orders/positions to SQLite.
+CSV replay is supported via the `csv` feed + `data/history.csv`.
+
+Example (explicit CSV replay):
+```
+bash
+./scripts/run_trader.sh \
+  --feed csv \
+  --history-csv data/history.csv \
+  --replay \
+  --speed 3600 \
+  --loop \
+  --ui rich
+```
+To run the demo feed instead:
 ```
 bash
 python paper_trader.py --feed demo --ui rich
@@ -43,11 +56,6 @@ You can switch the terminal UI:
 ```
 bash
 python paper_trader.py --feed demo --ui console
-```
-Or use the wrapper script:
-```
-bash
-./scripts/run_trader.sh --feed demo --ui rich
 ```
 ### 3) Run the dashboard (Streamlit)
 
@@ -65,6 +73,7 @@ By default, the dashboard reads from `runtime/db/paper_trader.db`.
 
 - You can change the DB path in the dashboard sidebar.
 - The dashboard will create the parent directory for the chosen DB path if it doesn’t exist yet (handy on fresh checkouts).
+- When running CSV replay from the dashboard, it shows an **estimated runtime** based on the history file’s time range and replay speed.
 
 ---
 
@@ -87,14 +96,15 @@ bash
   --feed csv \
   --history-csv data/history.csv \
   --replay \
-  --speed 600 \
+  --speed 3600 \
   --loop \
   --ui rich
 ```
 Notes:
 
 - `--replay` sleeps between ticks based on timestamp deltas.
-- `--speed 600` means “600× faster than real time”.
+- `--speed 3600` means “3600× faster than real time”.
+- Supported speeds in the dashboard UI include up to **14400×**.
 - `--loop` replays forever; omit it to stop after one pass.
 
 ---

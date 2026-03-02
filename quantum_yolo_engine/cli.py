@@ -76,15 +76,25 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=7, help="random seed for demo feed")
 
     # feed selection
-    parser.add_argument("--feed", choices=["demo", "csv"], default="demo", help="market feed type")
-    parser.add_argument("--history-csv", default=str(DEFAULT_HISTORY_CSV_PATH),
-                        help="path to history csv when feed=csv")
-    parser.add_argument("--replay", action="store_true", help="sleep between historical ticks (csv feed)")
+    parser.add_argument("--feed", choices=["demo", "csv"], default="csv", help="market feed type")
+    parser.add_argument(
+        "--history-csv",
+        default=str(DEFAULT_HISTORY_CSV_PATH),
+        help="path to history csv when feed=csv",
+    )
+
+    # replay controls (csv feed)
+    parser.add_argument(
+        "--replay",
+        action="store_true",
+        default=True,
+        help="sleep between historical ticks (csv feed). default: enabled",
+    )
     parser.add_argument(
         "--speed",
         type=float,
-        default=120.0,
-        help="replay speed: 120 means 120x faster than real time (csv feed)",
+        default=7200.0,
+        help="replay speed: 7200 means 7200x faster than real time (csv feed)",
     )
 
     # csv looping
@@ -97,6 +107,9 @@ def main() -> None:
     parser.add_argument("--ui", choices=["console", "rich"], default="rich", help="display mode")
     parser.add_argument("--quiet", action="store_true", help="minimal console logging")
     args = parser.parse_args()
+
+    if args.speed <= 0 or args.speed > 14400:
+        parser.error("--speed must be in (0, 14400]")
 
     db_path = Path(args.db)
     log_path = Path(args.log_file)

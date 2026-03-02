@@ -64,6 +64,9 @@ else:
         return deco
 
 
+# -----------------------------
+# CSS / path helpers
+# -----------------------------
 def _inject_global_css() -> None:
     st.markdown(
         f"""
@@ -161,6 +164,9 @@ def _normalize_path(value: str) -> str:
     return str(p)
 
 
+# -----------------------------
+# formatting helpers
+# -----------------------------
 def money_col(label: str) -> st.column_config.NumberColumn:
     return st.column_config.NumberColumn(label=label, format="$%.2f")
 
@@ -191,6 +197,44 @@ def _format_seconds(s: Optional[float]) -> str:
     return f"{s / 3600:.2f}h"
 
 
+def _parse_iso_utc(value: Optional[str]) -> Optional[dt.datetime]:
+    if not value:
+        return None
+    try:
+        x = dt.datetime.fromisoformat(value)
+        if x.tzinfo is None:
+            return x.replace(tzinfo=dt.timezone.utc)
+        return x.astimezone(dt.timezone.utc)
+    except Exception:
+        return None
+
+
+def _estimate_csv_replay_runtime_seconds(history_csv_path: str, speed: float) -> Optional[float]:
+    """
+    Estimate wall-clock runtime for a single replay pass.
+    Uses (history_end_ts - history_start_ts) / speed.
+
+    Note: actual runtime varies due to UI refresh + DB writes. When loop is enabled, runtime is infinite.
+    """
+    if speed <= 0:
+        return None
+
+    summary = load_history_summary(history_csv_path)
+    if not summary.exists:
+        return None
+
+    start_dt = _parse_iso_utc(summary.start_utc)
+    end_dt = _parse_iso_utc(summary.end_utc)
+    if start_dt is None or end_dt is None:
+        return None
+
+    sim_s = (end_dt - start_dt).total_seconds()
+    if sim_s <= 0:
+        return None
+
+    return sim_s / float(speed)
+
+
 def _pnl_color(value: float) -> str:
     if value > 0:
         return THEME.success
@@ -215,6 +259,9 @@ def _label(text: str, font_px: int = 14) -> str:
     )
 
 
+# -----------------------------
+# data helpers
+# -----------------------------
 def _last_and_prev_price(prices: pd.DataFrame, product_id: str) -> Tuple[Optional[float], Optional[float]]:
     if prices.empty or "product_id" not in prices.columns:
         return None, None
@@ -303,12 +350,12 @@ def _build_ohlc_from_ticks(prices: pd.DataFrame, product_id: str, interval: str)
 
 
 def _apply_events_filters(
-        events: pd.DataFrame,
-        asset_focus: str,
-        only_signals: bool,
-        levels: Set[str],
-        event_types: Set[str],
-        text_query: str,
+    events: pd.DataFrame,
+    asset_focus: str,
+    only_signals: bool,
+    levels: Set[str],
+    event_types: Set[str],
+    text_query: str,
 ) -> pd.DataFrame:
     if events.empty:
         return events
@@ -327,17 +374,20 @@ def _apply_events_filters(
     q = (text_query or "").strip().lower()
     if q:
         hay = (
-                df["message"].astype(str).str.lower()
-                + " "
-                + df["event_type"].astype(str).str.lower()
-                + " "
-                + df["product_id"].astype(str).str.lower()
+            df["message"].astype(str).str.lower()
+            + " "
+            + df["event_type"].astype(str).str.lower()
+            + " "
+            + df["product_id"].astype(str).str.lower()
         )
         df = df[hay.str.contains(q, na=False)]
 
     return df
 
 
+# -----------------------------
+# dev tools
+# -----------------------------
 def render_dev_tools(db_path: str) -> None:
     st.sidebar.divider()
     with st.sidebar.expander("developer tools", expanded=False):
@@ -372,6 +422,9 @@ def render_dev_tools(db_path: str) -> None:
                     st.session_state.confirm_clear = False
 
 
+# -----------------------------
+# trade overlay helpers
+# -----------------------------
 def _extract_price_from_message(msg: str) -> Optional[float]:
     m = re.search(r"at\s+([0-9]+(?:\.[0-9]+)?)", msg or "")
     if not m:
@@ -393,10 +446,10 @@ def _nearest_price_at_or_before(px: pd.DataFrame, ts: pd.Timestamp) -> Optional[
 
 
 def _build_trade_event_markers(
-        prices: pd.DataFrame,
-        events: pd.DataFrame,
-        asset_focus: str,
-        max_markers: int = 500,
+    prices: pd.DataFrame,
+    events: pd.DataFrame,
+    asset_focus: str,
+    max_markers: int = 500,
 ) -> pd.DataFrame:
     if prices.empty or events.empty:
         return pd.DataFrame()
@@ -445,11 +498,14 @@ def _build_trade_event_markers(
     return pd.DataFrame(rows)
 
 
+# -----------------------------
+# renderers
+# -----------------------------
 def _render_status_rail(
-        prices: pd.DataFrame,
-        positions: pd.DataFrame,
-        last_tick: Optional[pd.Timestamp],
-        asset_focus: str,
+    prices: pd.DataFrame,
+    positions: pd.DataFrame,
+    last_tick: Optional[pd.Timestamp],
+    asset_focus: str,
 ) -> None:
     btc_last, btc_prev = _last_and_prev_price(prices, "BTC-USD")
     eth_last, eth_prev = _last_and_prev_price(prices, "ETH-USD")
@@ -503,13 +559,13 @@ def _render_status_rail(
 
 
 def _render_price_panel(
-        prices: pd.DataFrame,
-        events_for_overlay: pd.DataFrame,
-        asset_focus: str,
-        last_n_ticks: int,
-        show_trade_overlay: bool,
-        chart_type: str,
-        candle_interval: str,
+    prices: pd.DataFrame,
+    events_for_overlay: pd.DataFrame,
+    asset_focus: str,
+    last_n_ticks: int,
+    show_trade_overlay: bool,
+    chart_type: str,
+    candle_interval: str,
 ) -> None:
     st.subheader("price chart")
 
@@ -552,8 +608,12 @@ def _render_price_panel(
         fig.update_layout(height=420, legend_title_text="")
 
     if show_trade_overlay and not events_for_overlay.empty:
-        markers = _build_trade_event_markers(prices=df, events=events_for_overlay, asset_focus=asset_focus,
-                                             max_markers=500)
+        markers = _build_trade_event_markers(
+            prices=df,
+            events=events_for_overlay,
+            asset_focus=asset_focus,
+            max_markers=500,
+        )
         if not markers.empty:
             for event_type in sorted(markers["event_type"].unique().tolist()):
                 m = markers[markers["event_type"] == event_type]
@@ -587,8 +647,7 @@ def _render_equity_panel(equity: pd.DataFrame) -> None:
     st.plotly_chart(fig_eq, config=PLOTLY_CONFIG)
 
 
-def _render_positions_panel(prices: pd.DataFrame, positions: pd.DataFrame, table_density: str,
-                            asset_focus: str) -> None:
+def _render_positions_panel(prices: pd.DataFrame, positions: pd.DataFrame, table_density: str, asset_focus: str) -> None:
     st.subheader("positions (with pnl)")
 
     if positions.empty:
@@ -749,9 +808,7 @@ def _render_history_tab(history_csv_path: str) -> None:
 # ---------------------------------------------------------------------------
 # Strategy tab
 # ---------------------------------------------------------------------------
-
 def _render_strategy_asset_summary(product_id: str, asset: Dict[str, Any]) -> None:
-    """Renders a read-only summary card for a single asset strategy."""
     enabled = asset.get("enabled", True)
     status_color = THEME.success if enabled else THEME.text_muted
     status_label = "enabled" if enabled else "disabled"
@@ -774,10 +831,16 @@ def _render_strategy_asset_summary(product_id: str, asset: Dict[str, Any]) -> No
     col3.metric("entries", str(len(entries)))
 
     col4, col5, col6 = st.columns(3)
-    col4.metric("tp1 price", f"${float(tp.get('tp1_price', 0)):,.2f}",
-                help=f"sell {float(tp.get('tp1_fraction', 0)) * 100:.0f}% of position")
-    col5.metric("tp2 price", f"${float(tp.get('tp2_price', 0)):,.2f}",
-                help=f"sell {float(tp.get('tp2_fraction', 0)) * 100:.0f}% of position")
+    col4.metric(
+        "tp1 price",
+        f"${float(tp.get('tp1_price', 0)):,.2f}",
+        help=f"sell {float(tp.get('tp1_fraction', 0)) * 100:.0f}% of position",
+    )
+    col5.metric(
+        "tp2 price",
+        f"${float(tp.get('tp2_price', 0)):,.2f}",
+        help=f"sell {float(tp.get('tp2_fraction', 0)) * 100:.0f}% of position",
+    )
     col6.metric("total entry budget", f"${sum(float(e.get('quote_size_usd', 0)) for e in entries):,.2f}")
 
     if entries:
@@ -795,7 +858,6 @@ def _render_strategy_tab(strategy_config_path: str) -> None:
         st.error(f"could not load strategy: {err}")
         st.info(f"expected path: `{strategy_config_path}`")
     else:
-        # --- top-level summary ---
         bankroll = float(data.get("bankroll_usd", 0))
         assets = data.get("assets", {})
         enabled_assets = [pid for pid, a in assets.items() if a.get("enabled", True)]
@@ -808,24 +870,18 @@ def _render_strategy_tab(strategy_config_path: str) -> None:
 
         st.divider()
 
-        # --- per-asset cards ---
         for product_id, asset in assets.items():
             with st.container(border=True):
                 _render_strategy_asset_summary(product_id, asset)
 
-        # --- raw YAML viewer ---
         with st.expander("view raw YAML", expanded=False):
             raw_text = yaml.dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False)
             st.code(raw_text, language="yaml")
 
     st.divider()
     st.subheader("edit / create strategy")
-    st.caption(
-        "paste a full strategy YAML below and save it to disk. "
-        "the engine must be restarted for changes to take effect."
-    )
+    st.caption("paste a full strategy YAML below and save it to disk. the engine must be restarted for changes to take effect.")
 
-    # seed the editor with the current file content (or a blank template)
     if ok and data is not None:
         default_yaml = yaml.dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False)
     else:
@@ -887,7 +943,7 @@ assets:
 
     save_path = st.text_input(
         "save to path",
-        value=strategy_config_path,
+        value=str(strategy_config_path),
         help="you can save to a new file to create an alternate strategy without overwriting the current one",
     )
 
@@ -929,7 +985,6 @@ assets:
 # ---------------------------------------------------------------------------
 # Fragments
 # ---------------------------------------------------------------------------
-
 def _run_every(refresh_sec: int) -> Optional[dt.timedelta]:
     if refresh_sec <= 0:
         return None
@@ -959,18 +1014,18 @@ def _frag_status(db_path: str, asset_focus: str) -> None:
 
 @fragment
 def _frag_overview(
-        db_path: str,
-        asset_focus: str,
-        last_n_ticks: int,
-        show_trade_overlay: bool,
-        chart_type: str,
-        candle_interval: str,
-        table_density: str,
-        event_limit: int,
-        show_only_signal_events: bool,
-        levels_selected: Set[str],
-        event_types_selected: Set[str],
-        event_search: str,
+    db_path: str,
+    asset_focus: str,
+    last_n_ticks: int,
+    show_trade_overlay: bool,
+    chart_type: str,
+    candle_interval: str,
+    table_density: str,
+    event_limit: int,
+    show_only_signal_events: bool,
+    levels_selected: Set[str],
+    event_types_selected: Set[str],
+    event_search: str,
 ) -> None:
     prices = load_price_ticks(db_path)
     positions = load_positions(db_path)
@@ -1003,19 +1058,18 @@ def _frag_overview(
 
     with right:
         with st.container(border=True):
-            _render_positions_panel(prices=prices, positions=positions, table_density=table_density,
-                                    asset_focus=asset_focus)
+            _render_positions_panel(prices=prices, positions=positions, table_density=table_density, asset_focus=asset_focus)
 
 
 @fragment
 def _frag_events(
-        db_path: str,
-        asset_focus: str,
-        event_limit: int,
-        show_only_signal_events: bool,
-        levels_selected: Set[str],
-        event_types_selected: Set[str],
-        event_search: str,
+    db_path: str,
+    asset_focus: str,
+    event_limit: int,
+    show_only_signal_events: bool,
+    levels_selected: Set[str],
+    event_types_selected: Set[str],
+    event_search: str,
 ) -> None:
     events = load_events(db_path, limit=event_limit)
     events_filtered = _apply_events_filters(
@@ -1058,6 +1112,9 @@ def _frag_diagnostics(db_path: str) -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Engine panel (sidebar controls)
+# ---------------------------------------------------------------------------
 def _render_engine_panel(history_csv_path: str) -> None:
     st.sidebar.subheader("engine")
 
@@ -1077,18 +1134,39 @@ def _render_engine_panel(history_csv_path: str) -> None:
 
         mode = st.sidebar.selectbox(
             "run mode",
-            ["demo (rich)", "demo (console)", "csv replay (rich)"],
+            ["csv replay (rich)", "demo (rich)", "demo (console)"],
             index=0,
         )
 
         replay_speed = st.sidebar.select_slider(
             "replay speed",
-            options=[1, 10, 60, 120, 300, 600, 1200, 3600],
-            value=600,
+            options=[1, 10, 60, 120, 300, 600, 1200, 3600, 7200, 14400],
+            value=3600,
             format_func=lambda v: f"{v}x",
             disabled=(mode != "csv replay (rich)"),
             help="how many times faster than real time to replay history",
         )
+
+        if mode == "csv replay (rich)":
+            est_s = _estimate_csv_replay_runtime_seconds(history_csv_path, float(replay_speed))
+            summary = load_history_summary(history_csv_path)
+
+            if est_s is None:
+                st.sidebar.caption("est. runtime: —")
+            else:
+                st.sidebar.markdown(
+                    f"<div style='margin-top:-6px; margin-bottom:8px; "
+                    f"padding:8px 10px; border-radius:12px; "
+                    f"background:rgba(255,255,255,0.06); "
+                    f"border:1px solid rgba(255,255,255,0.08)'>"
+                    f"<div style='font-size:12px; color:{THEME.text_muted}; font-weight:700'>est. runtime</div>"
+                    f"<div style='font-size:18px; font-weight:900; line-height:1.15'>{_format_seconds(est_s)}</div>"
+                    f"<div style='font-size:12px; color:{THEME.text_muted}; margin-top:2px'>"
+                    f"{summary.unique_ticks:,} ticks • {len(summary.products)} assets"
+                    f"</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
 
         base = ["--db", str(DEFAULT_DB_PATH)]
 
@@ -1124,6 +1202,9 @@ def _render_engine_panel(history_csv_path: str) -> None:
     st.sidebar.divider()
 
 
+# -----------------------------
+# main
+# -----------------------------
 def run_app() -> None:
     st.set_page_config(page_title=APP_TITLE, layout="wide")
     _inject_global_css()
@@ -1147,7 +1228,6 @@ def run_app() -> None:
     db_path = st.sidebar.text_input("sqlite db path", value=str(DEFAULT_DB_PATH))
     db_path = _normalize_path(db_path)
 
-    # strategy config path — used by the strategy tab
     strategy_config_path = st.sidebar.text_input(
         "strategy config path",
         value=DEFAULT_STRATEGY_PATH,
@@ -1235,25 +1315,23 @@ def run_app() -> None:
 
     st.divider()
 
-    # build tab list
     tab_names = ["overview", "events", "history", "strategy", "diagnostics"]
     if show_orders:
         tab_names.insert(1, "orders")
     tabs = st.tabs(tab_names)
 
-    # assign tabs by index
     idx = 0
-    overview_tab = tabs[idx];
+    overview_tab = tabs[idx]
     idx += 1
     orders_tab = None
     if show_orders:
-        orders_tab = tabs[idx];
+        orders_tab = tabs[idx]
         idx += 1
-    events_tab = tabs[idx];
+    events_tab = tabs[idx]
     idx += 1
-    history_tab = tabs[idx];
+    history_tab = tabs[idx]
     idx += 1
-    strategy_tab = tabs[idx];
+    strategy_tab = tabs[idx]
     idx += 1
     diag_tab = tabs[idx]
 
