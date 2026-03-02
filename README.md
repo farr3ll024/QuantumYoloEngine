@@ -4,7 +4,7 @@ A tiny **paper-trading sandbox** for BTC/ETH with:
 
 - a **paper trader** that simulates entry ladders + stop + take-profits and records everything to SQLite
 - a **Rich (terminal) dashboard** for live-ish feedback
-- a **Streamlit dashboard** for charts, positions, orders, events, and equity
+- a **Streamlit dashboard** for charts, positions, orders, events, equity, and reports
 - helper scripts to generate **historical CSV price data** for replays
 
 It’s intentionally experimental and a bit unhinged. Use it to learn, not to fund your retirement.
@@ -16,9 +16,10 @@ It’s intentionally experimental and a bit unhinged. Use it to learn, not to fu
 - `paper_trader.py` — main entrypoint (CLI)
 - `dashboard_streamlit.py` — Streamlit UI entrypoint
 - `quantum_yolo_engine/` — core engine (strategies, store, feeds, CLI, rich UI)
-- `dashboard/` — Streamlit dashboard code (db readers, charts, history helpers, strategy manager)
+- `dashboard/` — Streamlit dashboard code (db readers, charts, history helpers, strategy + report tooling)
 - `strategy.yaml` — strategy + risk config (bankroll, allocations, ladder entries, stop/TP)
 - `runtime/db/paper_trader.db` — default runtime SQLite database location (created locally; typically ignored by git)
+- `runtime/reports/` — exported run reports (created locally; typically ignored by git)
 - `scripts/` — convenience scripts (`setup`, `run_trader`, `run_dashboard`, `make_history`)
 - `.streamlit/config.toml` — Streamlit theme config (safe to commit)
 
@@ -74,6 +75,7 @@ By default, the dashboard reads from `runtime/db/paper_trader.db`.
 - You can change the DB path in the dashboard sidebar.
 - The dashboard will create the parent directory for the chosen DB path if it doesn’t exist yet (handy on fresh checkouts).
 - When running CSV replay from the dashboard, it shows an **estimated runtime** based on the history file’s time range and replay speed.
+- Trade markers are filtered to the **visible chart time window** so overlays stay aligned with the plotted price series.
 
 ---
 
@@ -109,6 +111,22 @@ Notes:
 
 ---
 
+## Reports (strategy optimization workflow)
+
+The dashboard includes a **Reports** tab that can build exportable, strategy-aware run summaries from your SQLite runtime DB.
+
+Reports include:
+
+- KPI summary (realized/unrealized/total PnL, drawdown, event counts)
+- equity curve export
+- raw tables export (events, orders, positions, price ticks)
+- reconstructed trade rounds (entry → exit) when possible, with duration + MFE/MAE
+- a strategy snapshot + strategy hash for attribution
+
+Exports can be downloaded as a **ZIP bundle** containing CSV/JSON/YAML files for offline analysis and strategy tuning.
+
+---
+
 ## Streamlit dashboard features
 
 The dashboard is designed to be useful while the trader is running:
@@ -117,6 +135,7 @@ The dashboard is designed to be useful while the trader is running:
 - **Events / Orders / Diagnostics**: inspect what the engine is doing
 - **History**: work with CSV history settings used for replay
 - **Strategy**: view the current `strategy.yaml`, validate edits, and save a new strategy file (restart the trader to apply changes)
+- **Reports**: build and export run summaries to help optimize `strategy.yaml`
 
 ---
 
