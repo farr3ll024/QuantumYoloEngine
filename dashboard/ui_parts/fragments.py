@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, Set
+from typing import Set
 
 import datetime as dt
 import streamlit as st
@@ -12,39 +12,20 @@ from .render_overview import render_overview, render_status_rail
 from .render_tables import render_events_panel, render_orders_panel
 
 
-HAS_FRAGMENTS = hasattr(st, "fragment")
-if HAS_FRAGMENTS:
-    fragment = st.fragment  # type: ignore[attr-defined]
-else:
-
-    def fragment(*_args: Any, **_kwargs: Any):  # type: ignore[no-redef]
-        def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
-            return fn
-
-        return deco
+if not hasattr(st, "fragment"):
+    raise RuntimeError(
+        "st.fragment is not available. Please upgrade Streamlit: pip install 'streamlit>=1.35.0'"
+    )
 
 
-def run_every(refresh_sec: int) -> Optional[dt.timedelta]:
-    if refresh_sec <= 0:
-        return None
-    return dt.timedelta(seconds=int(refresh_sec))
+# ---------------------------------------------------------------------------
+# Raw (un-decorated) fragment bodies — plain functions, no @st.fragment.
+# We apply st.fragment exactly once in build_fragments() below, never here.
+# Applying @st.fragment here AND wrapping again with run_every causes double-
+# wrapping which triggers full page reruns and scroll resets.
+# ---------------------------------------------------------------------------
 
-
-def with_run_every(
-    fn: Callable[..., Any],
-    refresh_sec: int,
-    *,
-    enabled: bool,
-    has_fragments: bool,
-) -> Callable[..., Any]:
-    if not enabled or not has_fragments:
-        return fn
-    base = getattr(fn, "__wrapped__", fn)
-    return fragment(run_every=run_every(refresh_sec))(base)  # type: ignore[misc]
-
-
-@fragment
-def frag_status(db_path: str, asset_focus: str) -> None:
+def _status_body(db_path: str, asset_focus: str) -> None:
     prices = load_price_ticks(db_path)
     positions = load_positions(db_path)
     last_tick = last_db_tick_ts(prices)
@@ -54,11 +35,15 @@ def frag_status(db_path: str, asset_focus: str) -> None:
             st.warning("no ticks found in db yet")
         else:
             st.caption(f"last tick (utc): {last_tick}")
-        render_status_rail(prices=prices, positions=positions, last_tick=last_tick, asset_focus=asset_focus)
+        render_status_rail(
+            prices=prices,
+            positions=positions,
+            last_tick=last_tick,
+            asset_focus=asset_focus,
+        )
 
 
-@fragment
-def frag_overview(
+def _overview_body(
     db_path: str,
     asset_focus: str,
     last_n_ticks: int,
@@ -98,8 +83,7 @@ def frag_overview(
     )
 
 
-@fragment
-def frag_events(
+def _events_body(
     db_path: str,
     asset_focus: str,
     event_limit: int,
@@ -121,16 +105,14 @@ def frag_events(
         render_events_panel(events_filtered)
 
 
-@fragment
-def frag_orders(db_path: str, asset_focus: str) -> None:
+def _orders_body(db_path: str, asset_focus: str) -> None:
     orders = load_orders(db_path)
     orders = apply_asset_focus(orders, asset_focus)
     with st.container(border=True):
         render_orders_panel(orders)
 
 
-@fragment
-def frag_diagnostics(db_path: str) -> None:
+def _diagnostics_body(db_path: str) -> None:
     prices = load_price_ticks(db_path)
     events = load_events(db_path, limit=500)
     orders = load_orders(db_path)
@@ -147,3 +129,48 @@ def frag_diagnostics(db_path: str) -> None:
                 "positions_rows": int(len(positions)),
             }
         )
+
+
+# ---------------------------------------------------------------------------
+# Public API: build_fragments()
+#
+# Call this ONCE per session (cache in st.session_state) so that each body
+# function is passed to st.fragment() exactly one time with a stable identity.
+# Re-creating fragment-wrapped callables on every render confuses Streamlit's
+# component diffing and causes full-page reruns.
+# ---------------------------------------------------------------------------
+
+class Fragments:
+    """Holds the five live fragment callables, each wrapped exactly once."""
+
+    def __init__(self, refresh_sec: int, enabled: bool):
+        interval = dt.timedelta(seconds=refresh_sec) if (enabled and refresh_sec > 0) else None
+
+        def _wrap(fn):
+            return st.fragment(run_every=interval)(fn) if interval else fn
+
+        self.status      = _wrap(_status_body)
+        self.overview    = _wrap(_overview_body)
+        self.events      = _wrap(_events_body)
+        self.orders      = _wrap(_orders_body)
+        self.diagnostics = _wrap(_diagnostics_body)
+
+
+def build_fragments(refresh_sec: int, enabled: bool) -> Fragments:
+    """
+    Returns a Fragments instance cached in st.session_state so the fragment
+    callables are created only once per session, not on every rerun.
+    Recreates them only if the refresh settings actually change.
+    """
+    cache_key = "_fragments_cache"
+    settings_key = "_fragments_settings"
+    current_settings = (refresh_sec, enabled)
+
+    if (
+        cache_key not in st.session_state
+        or st.session_state.get(settings_key) != current_settings
+    ):
+        st.session_state[cache_key] = Fragments(refresh_sec, enabled)
+        st.session_state[settings_key] = current_settings
+
+    return st.session_state[cache_key]

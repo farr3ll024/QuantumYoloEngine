@@ -21,8 +21,6 @@ DEFAULT_STRATEGY_PATH = "strategy.yaml"
 
 @dataclass(frozen=True)
 class UiState:
-    has_fragments: bool
-
     history_csv_path: str
     db_path: str
     strategy_config_path: str
@@ -112,7 +110,6 @@ def _estimate_csv_replay_runtime_seconds(history_csv_path: str, speed: float) ->
 def _render_engine_panel(*, history_csv_path: str, db_path: str) -> None:
     st.sidebar.subheader("engine")
 
-    # helpful: show the db path the engine will use
     st.sidebar.caption(f"engine db: {db_path}")
 
     status = get_engine_status()
@@ -165,7 +162,6 @@ def _render_engine_panel(*, history_csv_path: str, db_path: str) -> None:
                     unsafe_allow_html=True,
                 )
 
-        # IMPORTANT: use the selected db_path (not DEFAULT_DB_PATH)
         base = ["--db", str(db_path)]
 
         if mode == "demo (rich)":
@@ -201,8 +197,6 @@ def _render_engine_panel(*, history_csv_path: str, db_path: str) -> None:
 
 
 def build_sidebar_state() -> UiState:
-    has_fragments = hasattr(st, "fragment")
-
     if "history_csv_path" not in st.session_state:
         st.session_state.history_csv_path = str(DEFAULT_HISTORY_CSV)
 
@@ -211,12 +205,10 @@ def build_sidebar_state() -> UiState:
     history_csv_path = normalize_path(history_csv_path)
     st.session_state.history_csv_path = history_csv_path
 
-    # controls (db_path must be known BEFORE engine panel so the engine uses the same db)
     st.sidebar.subheader("controls")
     db_path = st.sidebar.text_input("sqlite db path", value=str(DEFAULT_DB_PATH))
     db_path = normalize_path(db_path)
 
-    # engine panel (now uses the chosen db_path)
     _render_engine_panel(history_csv_path=history_csv_path, db_path=db_path)
 
     strategy_config_path = st.sidebar.text_input(
@@ -292,7 +284,6 @@ def build_sidebar_state() -> UiState:
     show_orders = st.sidebar.checkbox("show orders tab", value=True)
 
     return UiState(
-        has_fragments=has_fragments,
         history_csv_path=history_csv_path,
         db_path=db_path,
         strategy_config_path=strategy_config_path,

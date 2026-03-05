@@ -7,16 +7,18 @@ A tiny **paper-trading sandbox** for BTC/ETH with:
 - a **Streamlit dashboard** for charts, positions, orders, events, equity, and reports
 - helper scripts to generate **historical CSV price data** for replays
 
-It’s intentionally experimental and a bit unhinged. Use it to learn, not to fund your retirement.
+It's intentionally experimental and a bit unhinged. Use it to learn, not to fund your retirement.
 
 ---
 
-## What’s in here
+## What's in here
 
 - `paper_trader.py` — main entrypoint (CLI)
 - `dashboard_streamlit.py` — Streamlit UI entrypoint
+- `run_dashboard.py` — Dash UI entrypoint *(beta — see below)*
 - `quantum_yolo_engine/` — core engine (strategies, store, feeds, CLI, rich UI)
-- `dashboard/` — Streamlit dashboard code (db readers, charts, history helpers, strategy + report tooling)
+- `dashboard/` — shared dashboard code (db readers, charts, history helpers, strategy + report tooling)
+- `dashboard_dash/` — Dash UI layer *(beta)*
 - `strategy.yaml` — strategy + risk config (bankroll, allocations, ladder entries, stop/TP)
 - `runtime/db/paper_trader.db` — default runtime SQLite database location (created locally; typically ignored by git)
 - `runtime/reports/` — exported run reports (created locally; typically ignored by git)
@@ -28,18 +30,17 @@ It’s intentionally experimental and a bit unhinged. Use it to learn, not to fu
 ## Quickstart
 
 ### 1) Setup a virtualenv + install deps
-```
-bash
+```bash
 ./scripts/setup.sh
 source .venv/bin/activate
 ```
+
 ### 2) Run the trader
 
 CSV replay is supported via the `csv` feed + `data/history.csv`.
 
 Example (explicit CSV replay):
-```
-bash
+```bash
 ./scripts/run_trader.sh \
   --feed csv \
   --history-csv data/history.csv \
@@ -49,32 +50,29 @@ bash
   --ui rich
 ```
 To run the demo feed instead:
-```
-bash
+```bash
 python paper_trader.py --feed demo --ui rich
 ```
 You can switch the terminal UI:
-```
-bash
+```bash
 python paper_trader.py --feed demo --ui console
 ```
+
 ### 3) Run the dashboard (Streamlit)
 
 In a second terminal (same repo):
-```
-bash
+```bash
 python -m streamlit run dashboard_streamlit.py
 ```
 Or use the wrapper script:
-```
-bash
+```bash
 ./scripts/run_dashboard.sh
 ```
 By default, the dashboard reads from `runtime/db/paper_trader.db`.
 
 - You can change the DB path in the dashboard sidebar.
-- The dashboard will create the parent directory for the chosen DB path if it doesn’t exist yet (handy on fresh checkouts).
-- When running CSV replay from the dashboard, it shows an **estimated runtime** based on the history file’s time range and replay speed.
+- The dashboard will create the parent directory for the chosen DB path if it doesn't exist yet (handy on fresh checkouts).
+- When running CSV replay from the dashboard, it shows an **estimated runtime** based on the history file's time range and replay speed.
 - Trade markers are filtered to the **visible chart time window** so overlays stay aligned with the plotted price series.
 
 ---
@@ -82,18 +80,16 @@ By default, the dashboard reads from `runtime/db/paper_trader.db`.
 ## Replay with historical data (CSV feed)
 
 ### 1) Generate history CSV (default output: `data/history.csv`)
-```
-bash
+```bash
 ./scripts/make_history.sh
 ```
 You can override parameters (and optionally write to a different output path):
-```
-bash
+```bash
 ./scripts/make_history.sh --days 30 --provider coingecko --granularity hourly --out data/history_30d.csv
 ```
+
 ### 2) Run the trader against the CSV
-```
-bash
+```bash
 ./scripts/run_trader.sh \
   --feed csv \
   --history-csv data/history.csv \
@@ -105,7 +101,7 @@ bash
 Notes:
 
 - `--replay` sleeps between ticks based on timestamp deltas.
-- `--speed 3600` means “3600× faster than real time”.
+- `--speed 3600` means "3600× faster than real time".
 - Supported speeds in the dashboard UI include up to **14400×**.
 - `--loop` replays forever; omit it to stop after one pass.
 
@@ -156,7 +152,7 @@ The strategy file defines:
 The engine validates:
 
 - total enabled allocations ≤ bankroll
-- each asset’s sum of entry budgets ≤ that asset’s allocation
+- each asset's sum of entry budgets ≤ that asset's allocation
 
 ---
 
@@ -174,8 +170,7 @@ The Streamlit dashboard is designed to read from the same DB while the trader is
 ---
 
 ## Useful CLI options
-```
-bash
+```bash
 python paper_trader.py --help
 ```
 Common ones:
@@ -184,19 +179,40 @@ Common ones:
 - `--db runtime/db/paper_trader.db` — SQLite db path
 - `--feed demo|csv` — market feed
 - `--ui rich|console` — terminal display mode
-- `--no-breakeven-stop` — don’t move stop to breakeven after TP1
+- `--no-breakeven-stop` — don't move stop to breakeven after TP1
 - `--quiet` — reduce console noise
 
 ---
 
 ## Troubleshooting
 
-- **Dashboard shows “no ticks yet”**: run the trader first, and ensure the dashboard DB path matches the trader `--db`.
+- **Dashboard shows "no ticks yet"**: run the trader first, and ensure the dashboard DB path matches the trader `--db`.
 - **CSV feed errors**: confirm your history CSV has columns `ts,product_id,price` and UTC timestamps.
 - **Streamlit refresh feels janky**: try lowering refresh seconds in the sidebar or disable auto refresh.
 
 ---
 
+## Dash dashboard *(beta — not recommended for daily use)*
+
+A second dashboard built on [Dash](https://dash.plotly.com/) lives in `dashboard_dash/` and is launched via `run_dashboard.py`. Its main motivation is solving Streamlit's scroll-reset-on-refresh behaviour (a known upstream issue) — Dash patches only changed DOM nodes via websocket so the page never reloads.
+
+It is currently **work in progress**. Styling, engine controls, and a few callbacks are still being refined. Use the Streamlit dashboard for anything serious.
+
+If you want to try it anyway:
+```bash
+pip install dash
+python run_dashboard.py          # opens http://127.0.0.1:8050
+python run_dashboard.py --port 8051 --debug --host 0.0.0.0   # optional flags
+```
+
+Known rough edges:
+
+- Visual theme is still being iterated on
+- Engine start/stop may behave differently from the Streamlit version
+- Startup segfault on macOS: always launch via `run_dashboard.py`, never import `dashboard_dash` directly (the entrypoint stubs out Streamlit's cache decorators which otherwise crash outside a Streamlit runtime)
+
+---
+
 ## Disclaimer
 
-This is a learning/paper-trading project. It does not connect to an exchange, and it is **not** financial advice. If you trade real money based on a repo named “QuantumYoloEngine”, that’s between you and your future self.
+This is a learning/paper-trading project. It does not connect to an exchange, and it is **not** financial advice. If you trade real money based on a repo named "QuantumYoloEngine", that's between you and your future self.

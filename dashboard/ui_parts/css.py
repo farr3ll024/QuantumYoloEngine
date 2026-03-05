@@ -1,11 +1,67 @@
 from __future__ import annotations
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from ..theme import THEME
 
 
+def inject_scroll_lock() -> None:
+    """
+    Injects a JS snippet via st.components.v1.html (which actually executes JS,
+    unlike st.markdown which strips <script> tags).
+
+    Fixes the confirmed Streamlit bug (issue #11971) where st.fragment(run_every=...)
+    resets scroll to top on every fragment rerun.
+
+    The script:
+    1. Listens for scroll events and saves window.scrollY into a closure variable
+    2. Uses a MutationObserver on the Streamlit root div to detect rerenders
+    3. After each rerender, instantly restores the saved scroll position
+    """
+    components.html(
+        """
+        <script>
+        (function() {
+            // Target the parent Streamlit window, not this iframe
+            var win = window.parent;
+            var doc = win.document;
+
+            if (win.__scrollLockInstalled) return;
+            win.__scrollLockInstalled = true;
+
+            var savedY = 0;
+
+            win.addEventListener('scroll', function() {
+                savedY = win.scrollY;
+            }, { passive: true });
+
+            var observer = new MutationObserver(function() {
+                if (savedY > 10) {
+                    win.scrollTo({ top: savedY, behavior: 'instant' });
+                }
+            });
+
+            function attachObserver() {
+                var root = doc.getElementById('root');
+                if (root) {
+                    // Observe only direct children of root to minimise callback frequency
+                    observer.observe(root, { childList: true, subtree: false });
+                } else {
+                    setTimeout(attachObserver, 100);
+                }
+            }
+            attachObserver();
+        })();
+        </script>
+        """,
+        height=0,
+        scrolling=False,
+    )
+
+
 def inject_global_css() -> None:
+    inject_scroll_lock()
     st.markdown(
         f"""
         <style>
