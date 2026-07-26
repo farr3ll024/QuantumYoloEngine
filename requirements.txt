@@ -1,13 +1,14 @@
-# core engine deps (unchanged)
-pyyaml
-rich
-pandas
-plotly
-requests
+# Core reference engine dependencies (quantum_yolo_engine/, paper_trader.py).
+# Pinned to the versions verified against the test suite in tests/python/.
+pyyaml==6.0.3
+rich==15.0.0
+pandas==3.0.5
+requests==2.34.2
 
-# dash dashboard (replaces streamlit)
-dash>=2.16.0
-dash-bootstrap-components>=1.6.0
-
-# kept in case you still want the streamlit dashboard alongside
-# streamlit>=1.35.0
+# Legacy local-only dashboards (dashboard/, dashboard_dash/, run_dashboard.py,
+# dashboard_streamlit.py). Not required to run the CLI or the test suite, and
+# not part of the hosted web/ application. Kept for local research use only.
+plotly>=5.22,<6
+dash>=2.16,<3
+dash-bootstrap-components>=1.6,<2
+streamlit>=1.35,<2

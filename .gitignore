@@ -104,3 +104,20 @@ htmlcov/
 .coverage
 coverage/
 reports/
+
+# -----------------------------
+# web/ (Vite + React + TS app)
+# -----------------------------
+web/node_modules/
+web/dist/
+web/.vite/
+web/coverage/
+web/playwright-report/
+web/test-results/
+web/.netlify/
+.netlify/
+
+# -----------------------------
+# parity fixtures are generated but committed for review; only ignore scratch
+# -----------------------------
+tests/parity/fixtures/.tmp/

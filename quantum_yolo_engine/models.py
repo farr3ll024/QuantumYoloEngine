@@ -1,7 +1,7 @@
 # quantum_yolo_engine/models.py
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List
 
 PRODUCT_IDS: List[str] = ["BTC-USD", "ETH-USD"]
@@ -30,7 +30,7 @@ class AssetStrategy:
     allocation_usd: float
     stop_price: float
     take_profit: TakeProfitRule
-    entries: List[EntryRule]
+    entries: List[EntryRule] = field(default_factory=list)
 
 
 @dataclass
@@ -44,6 +44,10 @@ class PositionState:
     tp1_done: bool = False
     tp2_done: bool = False
     stop_done: bool = False
+    # the currently active stop price for this run. Seeded from the strategy's
+    # stop_price at bootstrap and may move (e.g. to breakeven after TP1). Kept
+    # on position state rather than mutating the immutable strategy snapshot.
+    active_stop_price: float = 0.0
 
     @property
     def has_position(self) -> bool:

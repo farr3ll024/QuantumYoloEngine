@@ -1,0 +1,220 @@
+{
+  "bankrollUsd": 10000.0,
+  "datasetHash": "d0ee8765b25ac5fd9ee9f227bfa66fe629bdf66a23ac640311bbbd900dc771c2",
+  "expectedEquitySamples": [
+    {
+      "drawdown": 0.0,
+      "equity": 10000.0,
+      "ts": "2026-01-01T00:00:01+00:00"
+    },
+    {
+      "drawdown": -15.0,
+      "equity": 9985.0,
+      "ts": "2026-01-01T00:00:02+00:00"
+    }
+  ],
+  "expectedEvents": [
+    {
+      "eventType": "strategy_loaded",
+      "level": "info",
+      "message": "strategy loaded (sha256=cdbcc83b5edb\u2026)",
+      "payload": {
+        "sha256": "cdbcc83b5edb88c643414cd9da4f22e4514f51e2db69b5409b97bd658bfd81f0",
+        "snapshot": {
+          "assets": {
+            "BTC-USD": {
+              "allocation_usd": 10000.0,
+              "enabled": true,
+              "entries": [
+                {
+                  "id": "e1",
+                  "price": 100.0,
+                  "quote_size_usd": 100.0
+                }
+              ],
+              "stop_price": 90.0,
+              "take_profit": {
+                "tp1_fraction": 0.5,
+                "tp1_price": 200.0,
+                "tp2_fraction": 0.5,
+                "tp2_price": 220.0
+              }
+            }
+          },
+          "generated_at_utc": "2026-07-26T02:40:13.314931+00:00",
+          "strategy_source_path": "fixtures/04_entry_then_stop_later_tick.yaml"
+        },
+        "strategy_source_path": "fixtures/04_entry_then_stop_later_tick.yaml"
+      },
+      "productId": null,
+      "sequence": 1,
+      "ts": "2026-07-26T02:40:13.314931+00:00"
+    },
+    {
+      "eventType": "bootstrap_position",
+      "level": "info",
+      "message": "created initial position state",
+      "payload": null,
+      "productId": "BTC-USD",
+      "sequence": 2,
+      "ts": "2026-07-26T02:40:13.314931+00:00"
+    },
+    {
+      "eventType": "seed_entries",
+      "level": "info",
+      "message": "seeded entry ladder orders",
+      "payload": null,
+      "productId": "BTC-USD",
+      "sequence": 3,
+      "ts": "2026-07-26T02:40:13.314931+00:00"
+    },
+    {
+      "eventType": "entry_filled",
+      "level": "info",
+      "message": "filled entry e1 at 100.00",
+      "payload": {
+        "base_qty": 1.0,
+        "fill_price": 100.0,
+        "limit_price": 100.0,
+        "market_price": 100.0,
+        "new_avg_entry": 100.0,
+        "order_id": "fixture-04_entry_then_stop_later_tick:BTC-USD:e1",
+        "quote_size": 100.0,
+        "rule_id": "e1"
+      },
+      "productId": "BTC-USD",
+      "sequence": 4,
+      "ts": "2026-01-01T00:00:01+00:00"
+    },
+    {
+      "eventType": "stop_filled",
+      "level": "warn",
+      "message": "stop filled at 85.00",
+      "payload": {
+        "market_price": 85.0,
+        "qty": 1.0,
+        "realized_pnl": -15.0,
+        "stop_price": 90.0
+      },
+      "productId": "BTC-USD",
+      "sequence": 5,
+      "ts": "2026-01-01T00:00:02+00:00"
+    }
+  ],
+  "expectedOrders": [
+    {
+      "base_size": null,
+      "created_at": "2026-01-01T00:00:01+00:00",
+      "filled_at": "2026-01-01T00:00:02+00:00",
+      "order_id": "fixture-04_entry_then_stop_later_tick:BTC-USD:stop",
+      "order_type": "stop",
+      "price": 90.0,
+      "product_id": "BTC-USD",
+      "quote_size_usd": null,
+      "rule_id": "stop",
+      "side": "sell",
+      "status": "filled"
+    },
+    {
+      "base_size": null,
+      "created_at": "2026-01-01T00:00:01+00:00",
+      "filled_at": null,
+      "order_id": "fixture-04_entry_then_stop_later_tick:BTC-USD:tp1",
+      "order_type": "tp1",
+      "price": 200.0,
+      "product_id": "BTC-USD",
+      "quote_size_usd": null,
+      "rule_id": "tp1",
+      "side": "sell",
+      "status": "canceled"
+    },
+    {
+      "base_size": null,
+      "created_at": "2026-01-01T00:00:01+00:00",
+      "filled_at": null,
+      "order_id": "fixture-04_entry_then_stop_later_tick:BTC-USD:tp2",
+      "order_type": "tp2",
+      "price": 220.0,
+      "product_id": "BTC-USD",
+      "quote_size_usd": null,
+      "rule_id": "tp2",
+      "side": "sell",
+      "status": "canceled"
+    },
+    {
+      "base_size": null,
+      "created_at": "2026-07-26T02:40:13.314931+00:00",
+      "filled_at": "2026-01-01T00:00:01+00:00",
+      "order_id": "fixture-04_entry_then_stop_later_tick:BTC-USD:e1",
+      "order_type": "entry",
+      "price": 100.0,
+      "product_id": "BTC-USD",
+      "quote_size_usd": 100.0,
+      "rule_id": "e1",
+      "side": "buy",
+      "status": "filled"
+    }
+  ],
+  "expectedPositions": [
+    {
+      "active_stop_price": 90.0,
+      "avg_entry": 100.0,
+      "base_qty": 0.0,
+      "invested_quote": 100.0,
+      "product_id": "BTC-USD",
+      "realized_pnl": -15.0,
+      "state": "stopped_out",
+      "stop_done": 1,
+      "tp1_done": 0,
+      "tp2_done": 0
+    }
+  ],
+  "expectedSummary": {
+    "ending_equity": 9985.0,
+    "entries_filled_count": 1,
+    "max_drawdown": -15.0,
+    "stop_count": 1,
+    "total_realized_pnl": -15.0,
+    "tp1_count": 0,
+    "tp2_count": 0
+  },
+  "moveStopToBreakevenAfterTp1": true,
+  "name": "04_entry_then_stop_later_tick",
+  "roundDp": 8,
+  "strategy": {
+    "BTC-USD": {
+      "allocationUsd": 10000.0,
+      "enabled": true,
+      "entries": [
+        {
+          "id": "e1",
+          "price": 100,
+          "quoteSizeUsd": 100
+        }
+      ],
+      "productId": "BTC-USD",
+      "stopPrice": 90,
+      "takeProfit": {
+        "tp1Fraction": 0.5,
+        "tp1Price": 200,
+        "tp2Fraction": 0.5,
+        "tp2Price": 220
+      }
+    }
+  },
+  "strategyHash": "cdbcc83b5edb88c643414cd9da4f22e4514f51e2db69b5409b97bd658bfd81f0",
+  "ticks": [
+    {
+      "prices": {
+        "BTC-USD": 100
+      },
+      "ts": "2026-01-01T00:00:01+00:00"
+    },
+    {
+      "prices": {
+        "BTC-USD": 85
+      },
+      "ts": "2026-01-01T00:00:02+00:00"
+    }
+  ]
+}

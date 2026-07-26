@@ -1,0 +1,391 @@
+{
+  "bankrollUsd": 10000.0,
+  "datasetHash": "7c5fb1e49df3f6b61f7fa736ade31fc38414c673ba3bd3a8bdc7ce21905e6635",
+  "expectedEquitySamples": [
+    {
+      "drawdown": 0.0,
+      "equity": 10000.0,
+      "ts": "2026-01-01T00:00:01+00:00"
+    },
+    {
+      "drawdown": 0.0,
+      "equity": 10165.0,
+      "ts": "2026-01-01T00:00:02+00:00"
+    }
+  ],
+  "expectedEvents": [
+    {
+      "eventType": "strategy_loaded",
+      "level": "info",
+      "message": "strategy loaded (sha256=6bfe26472abc\u2026)",
+      "payload": {
+        "sha256": "6bfe26472abccdd962f5c84cbf5c5fc658af9232fd0d530f1638cd4574f47aa6",
+        "snapshot": {
+          "assets": {
+            "BTC-USD": {
+              "allocation_usd": 10000.0,
+              "enabled": true,
+              "entries": [
+                {
+                  "id": "b1",
+                  "price": 100.0,
+                  "quote_size_usd": 100.0
+                }
+              ],
+              "stop_price": 90.0,
+              "take_profit": {
+                "tp1_fraction": 0.5,
+                "tp1_price": 200.0,
+                "tp2_fraction": 0.5,
+                "tp2_price": 220.0
+              }
+            },
+            "ETH-USD": {
+              "allocation_usd": 10000.0,
+              "enabled": true,
+              "entries": [
+                {
+                  "id": "e1",
+                  "price": 10.0,
+                  "quote_size_usd": 50.0
+                }
+              ],
+              "stop_price": 9.0,
+              "take_profit": {
+                "tp1_fraction": 0.5,
+                "tp1_price": 20.0,
+                "tp2_fraction": 0.5,
+                "tp2_price": 22.0
+              }
+            }
+          },
+          "generated_at_utc": "2026-07-26T02:40:13.796074+00:00",
+          "strategy_source_path": "fixtures/08_btc_eth_interleaved.yaml"
+        },
+        "strategy_source_path": "fixtures/08_btc_eth_interleaved.yaml"
+      },
+      "productId": null,
+      "sequence": 1,
+      "ts": "2026-07-26T02:40:13.796074+00:00"
+    },
+    {
+      "eventType": "bootstrap_position",
+      "level": "info",
+      "message": "created initial position state",
+      "payload": null,
+      "productId": "BTC-USD",
+      "sequence": 2,
+      "ts": "2026-07-26T02:40:13.796074+00:00"
+    },
+    {
+      "eventType": "seed_entries",
+      "level": "info",
+      "message": "seeded entry ladder orders",
+      "payload": null,
+      "productId": "BTC-USD",
+      "sequence": 3,
+      "ts": "2026-07-26T02:40:13.796074+00:00"
+    },
+    {
+      "eventType": "bootstrap_position",
+      "level": "info",
+      "message": "created initial position state",
+      "payload": null,
+      "productId": "ETH-USD",
+      "sequence": 4,
+      "ts": "2026-07-26T02:40:13.796074+00:00"
+    },
+    {
+      "eventType": "seed_entries",
+      "level": "info",
+      "message": "seeded entry ladder orders",
+      "payload": null,
+      "productId": "ETH-USD",
+      "sequence": 5,
+      "ts": "2026-07-26T02:40:13.796074+00:00"
+    },
+    {
+      "eventType": "entry_filled",
+      "level": "info",
+      "message": "filled entry b1 at 100.00",
+      "payload": {
+        "base_qty": 1.0,
+        "fill_price": 100.0,
+        "limit_price": 100.0,
+        "market_price": 100.0,
+        "new_avg_entry": 100.0,
+        "order_id": "fixture-08_btc_eth_interleaved:BTC-USD:b1",
+        "quote_size": 100.0,
+        "rule_id": "b1"
+      },
+      "productId": "BTC-USD",
+      "sequence": 6,
+      "ts": "2026-01-01T00:00:01+00:00"
+    },
+    {
+      "eventType": "entry_filled",
+      "level": "info",
+      "message": "filled entry e1 at 10.00",
+      "payload": {
+        "base_qty": 5.0,
+        "fill_price": 10.0,
+        "limit_price": 10.0,
+        "market_price": 10.0,
+        "new_avg_entry": 10.0,
+        "order_id": "fixture-08_btc_eth_interleaved:ETH-USD:e1",
+        "quote_size": 50.0,
+        "rule_id": "e1"
+      },
+      "productId": "ETH-USD",
+      "sequence": 7,
+      "ts": "2026-01-01T00:00:01+00:00"
+    },
+    {
+      "eventType": "stop_moved",
+      "level": "info",
+      "message": "moved stop to breakeven from 90.00 to 100.00",
+      "payload": null,
+      "productId": "BTC-USD",
+      "sequence": 8,
+      "ts": "2026-01-01T00:00:02+00:00"
+    },
+    {
+      "eventType": "tp1_filled",
+      "level": "info",
+      "message": "tp1 filled at 210.00",
+      "payload": {
+        "market_price": 210.0,
+        "qty": 0.5,
+        "realized_pnl": 55.0,
+        "tp1_price": 200.0
+      },
+      "productId": "BTC-USD",
+      "sequence": 9,
+      "ts": "2026-01-01T00:00:02+00:00"
+    },
+    {
+      "eventType": "stop_moved",
+      "level": "info",
+      "message": "moved stop to breakeven from 9.00 to 10.00",
+      "payload": null,
+      "productId": "ETH-USD",
+      "sequence": 10,
+      "ts": "2026-01-01T00:00:02+00:00"
+    },
+    {
+      "eventType": "tp1_filled",
+      "level": "info",
+      "message": "tp1 filled at 21.00",
+      "payload": {
+        "market_price": 21.0,
+        "qty": 2.5,
+        "realized_pnl": 27.5,
+        "tp1_price": 20.0
+      },
+      "productId": "ETH-USD",
+      "sequence": 11,
+      "ts": "2026-01-01T00:00:02+00:00"
+    }
+  ],
+  "expectedOrders": [
+    {
+      "base_size": null,
+      "created_at": "2026-01-01T00:00:01+00:00",
+      "filled_at": null,
+      "order_id": "fixture-08_btc_eth_interleaved:BTC-USD:stop",
+      "order_type": "stop",
+      "price": 90.0,
+      "product_id": "BTC-USD",
+      "quote_size_usd": null,
+      "rule_id": "stop",
+      "side": "sell",
+      "status": "canceled"
+    },
+    {
+      "base_size": null,
+      "created_at": "2026-01-01T00:00:01+00:00",
+      "filled_at": "2026-01-01T00:00:02+00:00",
+      "order_id": "fixture-08_btc_eth_interleaved:BTC-USD:tp1",
+      "order_type": "tp1",
+      "price": 200.0,
+      "product_id": "BTC-USD",
+      "quote_size_usd": null,
+      "rule_id": "tp1",
+      "side": "sell",
+      "status": "filled"
+    },
+    {
+      "base_size": null,
+      "created_at": "2026-01-01T00:00:01+00:00",
+      "filled_at": null,
+      "order_id": "fixture-08_btc_eth_interleaved:BTC-USD:tp2",
+      "order_type": "tp2",
+      "price": 220.0,
+      "product_id": "BTC-USD",
+      "quote_size_usd": null,
+      "rule_id": "tp2",
+      "side": "sell",
+      "status": "open"
+    },
+    {
+      "base_size": null,
+      "created_at": "2026-01-01T00:00:01+00:00",
+      "filled_at": null,
+      "order_id": "fixture-08_btc_eth_interleaved:ETH-USD:stop",
+      "order_type": "stop",
+      "price": 9.0,
+      "product_id": "ETH-USD",
+      "quote_size_usd": null,
+      "rule_id": "stop",
+      "side": "sell",
+      "status": "canceled"
+    },
+    {
+      "base_size": null,
+      "created_at": "2026-01-01T00:00:01+00:00",
+      "filled_at": "2026-01-01T00:00:02+00:00",
+      "order_id": "fixture-08_btc_eth_interleaved:ETH-USD:tp1",
+      "order_type": "tp1",
+      "price": 20.0,
+      "product_id": "ETH-USD",
+      "quote_size_usd": null,
+      "rule_id": "tp1",
+      "side": "sell",
+      "status": "filled"
+    },
+    {
+      "base_size": null,
+      "created_at": "2026-01-01T00:00:01+00:00",
+      "filled_at": null,
+      "order_id": "fixture-08_btc_eth_interleaved:ETH-USD:tp2",
+      "order_type": "tp2",
+      "price": 22.0,
+      "product_id": "ETH-USD",
+      "quote_size_usd": null,
+      "rule_id": "tp2",
+      "side": "sell",
+      "status": "open"
+    },
+    {
+      "base_size": null,
+      "created_at": "2026-07-26T02:40:13.796074+00:00",
+      "filled_at": "2026-01-01T00:00:01+00:00",
+      "order_id": "fixture-08_btc_eth_interleaved:BTC-USD:b1",
+      "order_type": "entry",
+      "price": 100.0,
+      "product_id": "BTC-USD",
+      "quote_size_usd": 100.0,
+      "rule_id": "b1",
+      "side": "buy",
+      "status": "filled"
+    },
+    {
+      "base_size": null,
+      "created_at": "2026-07-26T02:40:13.796074+00:00",
+      "filled_at": "2026-01-01T00:00:01+00:00",
+      "order_id": "fixture-08_btc_eth_interleaved:ETH-USD:e1",
+      "order_type": "entry",
+      "price": 10.0,
+      "product_id": "ETH-USD",
+      "quote_size_usd": 50.0,
+      "rule_id": "e1",
+      "side": "buy",
+      "status": "filled"
+    }
+  ],
+  "expectedPositions": [
+    {
+      "active_stop_price": 100.0,
+      "avg_entry": 100.0,
+      "base_qty": 0.5,
+      "invested_quote": 100.0,
+      "product_id": "BTC-USD",
+      "realized_pnl": 55.0,
+      "state": "tp1_hit",
+      "stop_done": 0,
+      "tp1_done": 1,
+      "tp2_done": 0
+    },
+    {
+      "active_stop_price": 10.0,
+      "avg_entry": 10.0,
+      "base_qty": 2.5,
+      "invested_quote": 50.0,
+      "product_id": "ETH-USD",
+      "realized_pnl": 27.5,
+      "state": "tp1_hit",
+      "stop_done": 0,
+      "tp1_done": 1,
+      "tp2_done": 0
+    }
+  ],
+  "expectedSummary": {
+    "ending_equity": 10165.0,
+    "entries_filled_count": 2,
+    "max_drawdown": 0.0,
+    "stop_count": 0,
+    "total_realized_pnl": 82.5,
+    "tp1_count": 2,
+    "tp2_count": 0
+  },
+  "moveStopToBreakevenAfterTp1": true,
+  "name": "08_btc_eth_interleaved",
+  "roundDp": 8,
+  "strategy": {
+    "BTC-USD": {
+      "allocationUsd": 10000.0,
+      "enabled": true,
+      "entries": [
+        {
+          "id": "b1",
+          "price": 100,
+          "quoteSizeUsd": 100
+        }
+      ],
+      "productId": "BTC-USD",
+      "stopPrice": 90,
+      "takeProfit": {
+        "tp1Fraction": 0.5,
+        "tp1Price": 200,
+        "tp2Fraction": 0.5,
+        "tp2Price": 220
+      }
+    },
+    "ETH-USD": {
+      "allocationUsd": 10000.0,
+      "enabled": true,
+      "entries": [
+        {
+          "id": "e1",
+          "price": 10,
+          "quoteSizeUsd": 50
+        }
+      ],
+      "productId": "ETH-USD",
+      "stopPrice": 9,
+      "takeProfit": {
+        "tp1Fraction": 0.5,
+        "tp1Price": 20,
+        "tp2Fraction": 0.5,
+        "tp2Price": 22
+      }
+    }
+  },
+  "strategyHash": "6bfe26472abccdd962f5c84cbf5c5fc658af9232fd0d530f1638cd4574f47aa6",
+  "ticks": [
+    {
+      "prices": {
+        "BTC-USD": 100,
+        "ETH-USD": 10
+      },
+      "ts": "2026-01-01T00:00:01+00:00"
+    },
+    {
+      "prices": {
+        "BTC-USD": 210,
+        "ETH-USD": 21
+      },
+      "ts": "2026-01-01T00:00:02+00:00"
+    }
+  ]
+}

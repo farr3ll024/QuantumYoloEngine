@@ -49,8 +49,10 @@ def build_rich_dashboard(store: StateStore, prices: PriceSnapshot, tick_num: int
         """
         select ts, product_id, event_type, message
         from events
-        order by id desc limit 10
-        """
+        where run_id = ?
+        order by sequence desc limit 10
+        """,
+        (store.run_id,),
     ).fetchall()
 
     events_table = Table(title="recent events", expand=True)
@@ -82,9 +84,10 @@ def print_recent_events(store: StateStore, limit: int = 12) -> None:
         """
         select ts, level, product_id, event_type, message
         from events
-        order by id desc limit ?
+        where run_id = ?
+        order by sequence desc limit ?
         """,
-        (limit,),
+        (store.run_id, limit),
     ).fetchall()
 
     print("\n=== recent events ===")

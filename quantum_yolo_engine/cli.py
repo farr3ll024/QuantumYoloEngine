@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 import logging
 import time
+import uuid
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
@@ -19,6 +20,7 @@ from .store import StateStore
 from .strategy import load_strategy_config
 from .theme import RICH_THEME
 from .ui_rich import build_rich_dashboard, print_recent_events
+from .validate import validate_strategy
 
 DEFAULT_CONFIG_PATH = Path("strategy.yaml")
 DEFAULT_DB_PATH = Path("runtime/db/paper_trader.db")
@@ -69,6 +71,11 @@ def main() -> None:
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="path to strategy yaml")
     parser.add_argument("--db", default=str(DEFAULT_DB_PATH), help="sqlite db path")
     parser.add_argument("--log-file", default=str(DEFAULT_LOG_PATH), help="log file path")
+    parser.add_argument(
+        "--run-id",
+        default=None,
+        help="run id to use/resume. default: a fresh uuid4 is generated for a new run.",
+    )
 
     # demo-only settings
     parser.add_argument("--ticks", type=int, default=70, help="number of demo ticks to run")
@@ -83,12 +90,13 @@ def main() -> None:
         help="path to history csv when feed=csv",
     )
 
-    # replay controls (csv feed)
+    # replay controls (csv feed). BooleanOptionalAction auto-generates --no-replay.
     parser.add_argument(
         "--replay",
-        action="store_true",
+        dest="replay",
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="sleep between historical ticks (csv feed). default: enabled",
+        help="sleep between historical ticks (csv feed). default: enabled. use --no-replay to disable.",
     )
     parser.add_argument(
         "--speed",
@@ -121,13 +129,18 @@ def main() -> None:
     logger = setup_logger(args.log_level, log_path=log_path)
 
     bankroll, strategies = load_strategy_config(str(config_path))
+    validate_strategy(bankroll, strategies)
+    # RiskManager checks stay as a secondary guard for legacy embedders that
+    # construct AssetStrategy objects directly instead of via strategy.yaml.
     risk = RiskManager(bankroll_usd=bankroll)
     risk.validate_strategy_allocations(strategies)
     for strat in strategies.values():
         if strat.enabled:
             risk.validate_entry_budget(strat)
 
-    store = StateStore(str(db_path))
+    run_id = args.run_id or str(uuid.uuid4())
+
+    store = StateStore(str(db_path), run_id=run_id)
     trader = PaperTrader(
         store=store,
         strategies=strategies,
@@ -139,7 +152,7 @@ def main() -> None:
 
     console = Console(theme=RICH_THEME)
 
-    logger.info("starting QuantumYoloEngine paper trader")
+    logger.info("starting QuantumYoloEngine paper trader | run_id=%s", run_id)
     logger.info("config=%s | db=%s | feed=%s | ui_parts=%s", str(config_path), str(db_path), args.feed, args.ui)
 
     try:
@@ -238,6 +251,9 @@ def main() -> None:
     store.print_summary()
 
     cur = store.conn.cursor()
-    total_realized = cur.execute("select coalesce(sum(realized_pnl), 0) as v from positions").fetchone()["v"]
-    print(f"\ncombined realized pnl: ${float(total_realized):.2f}")
-    logger.info("combined realized pnl: $%.2f", float(total_realized))
+    total_realized = cur.execute(
+        "select coalesce(sum(realized_pnl), 0) as v from positions where run_id = ?", (run_id,)
+    ).fetchone()["v"]
+    print(f"\nrun_id: {run_id}")
+    print(f"combined realized pnl: ${float(total_realized):.2f}")
+    logger.info("run_id=%s | combined realized pnl: $%.2f", run_id, float(total_realized))

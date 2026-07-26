@@ -11,28 +11,85 @@ It's intentionally experimental and a bit unhinged. Use it to learn, not to fund
 
 ---
 
+## Hosted web simulator (start here if you just want to use it)
+
+The primary way to use QuantumYoloEngine is now the browser-based simulator under [`web/`](web/) —
+a Vite + React + TypeScript app that runs the entire simulation in a Web Worker, client-side. No
+account, no backend, no exchange connection. See [`web/README.md`](web/README.md) if present, or
+just:
+
+```bash
+cd web
+npm ci
+npm run dev
+```
+
+Everything below this point documents the **Python reference engine** — the original CLI/local
+dashboards, and the source of truth the web app's TypeScript engine is behaviorally tested against
+(see `tests/parity/`).
+
+---
+
 ## What's in here
 
-- `paper_trader.py` — main entrypoint (CLI)
-- `dashboard_streamlit.py` — Streamlit UI entrypoint
-- `run_dashboard.py` — Dash UI entrypoint *(beta — see below)*
-- `quantum_yolo_engine/` — core engine (strategies, store, feeds, CLI, rich UI)
-- `dashboard/` — shared dashboard code (db readers, charts, history helpers, strategy + report tooling)
-- `dashboard_dash/` — Dash UI layer *(beta)*
+- `paper_trader.py` — main entrypoint (CLI) for the Python reference engine
+- `dashboard_streamlit.py` — Streamlit UI entrypoint *(local/legacy — see note below)*
+- `run_dashboard.py` — Dash UI entrypoint *(local/legacy, beta — see below)*
+- `quantum_yolo_engine/` — core reference engine (strategies, store, feeds, CLI, rich UI, validation, metrics)
+- `dashboard/` — shared dashboard code (db readers, charts, history helpers, strategy + report tooling) *(local/legacy)*
+- `dashboard_dash/` — Dash UI layer *(local/legacy, beta)*
+- `web/` — the hosted browser simulator (Vite + React + TypeScript); see above
+- `tests/python/` — pytest suite for the Python reference engine
+- `tests/parity/` — behavioral parity fixtures shared between the Python and TypeScript engines
 - `strategy.yaml` — strategy + risk config (bankroll, allocations, ladder entries, stop/TP)
 - `runtime/db/paper_trader.db` — default runtime SQLite database location (created locally; typically ignored by git)
 - `runtime/reports/` — exported run reports (created locally; typically ignored by git)
 - `scripts/` — convenience scripts (`setup`, `run_trader`, `run_dashboard`, `make_history`)
 - `.streamlit/config.toml` — Streamlit theme config (safe to commit)
 
+> **Known limitation:** `dashboard/` and `dashboard_dash/` predate the `run_id`-scoped SQLite schema
+> (see "Database" below) and have not been updated to filter by `run_id`. They still work for a
+> database written by a single run, but were not re-verified against multi-run databases as part of
+> the web migration. The Python CLI (`paper_trader.py`) and `quantum_yolo_engine/` itself are fully
+> updated and tested.
+
 ---
 
-## Quickstart
+## Quickstart (Python reference engine)
 
 ### 1) Setup a virtualenv + install deps
+
+**macOS / Linux:**
 ```bash
 ./scripts/setup.sh
 source .venv/bin/activate
+```
+
+**Windows (PowerShell):**
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements-dev.txt
+```
+
+Any platform, manually:
+```bash
+python -m venv .venv
+# macOS/Linux: source .venv/bin/activate
+# Windows:     .venv\Scripts\activate
+pip install -r requirements-dev.txt   # or requirements.txt for a non-dev install
+```
+
+### Run the Python test suite
+```bash
+pytest
+# with coverage:
+pytest --cov=quantum_yolo_engine --cov-report=term-missing
+```
+
+### Regenerate behavioral parity fixtures (after changing engine.py or metrics.py)
+```bash
+python tests/parity/generate_fixtures.py
 ```
 
 ### 2) Run the trader

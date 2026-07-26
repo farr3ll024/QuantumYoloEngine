@@ -1,0 +1,11 @@
+{
+  "datasets": [
+    {
+      "id": "sample-btc-eth",
+      "name": "Sample BTC/ETH (21 days, hourly)",
+      "file": "/datasets/sample-btc-eth.csv",
+      "products": ["BTC-USD", "ETH-USD"],
+      "description": "Deterministic synthetic hourly price series (seeded), bundled for a zero-setup first run."
+    }
+  ]
+}
