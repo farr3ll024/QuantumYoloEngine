@@ -78,13 +78,15 @@ runtime/db/
 # -----------------------------
 history.csv
 history_*.csv
-data/
+# anchored to the repo root: the python engine writes data/history.csv here.
+# an unanchored `data/` also matched web/src/data/ and kept csv.ts out of git.
+/data/*
 *.parquet
 *.feather
 
 # keep a small committed sample if you want:
 !history.sample.csv
-!data/.gitkeep
+!/data/.gitkeep
 
 # -----------------------------
 # build / packaging
