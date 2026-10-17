@@ -5,8 +5,9 @@ Guidance for Claude Code when working in this repository.
 ## Umbrella context
 
 QuantumYoloEngine is one product under the **Reints Labs LLC** portfolio.
-The private ops dashboard correlating all Reints Labs repos, deploys, and
-domains lives in the sibling `reints-labs-control-center` repo.
+Portfolio-wide agent rules and known traps: `docs/agent-guide.md` in the
+sibling `reints-labs-control-center` repo, which also holds the private ops
+dashboard correlating all Reints Labs repos, deploys, and domains.
 
 ## What this is
 
@@ -30,6 +31,43 @@ the other and regenerate parity fixtures** — don't let them drift:
 ```bash
 python tests/parity/generate_fixtures.py
 ```
+
+Both `tests/python/test_parity_fixtures.py` and `web/tests/unit/parity.test.ts`
+check the committed fixtures. Regenerating rewrites the bootstrap timestamps
+in every fixture even when nothing else changed: only regenerate after a
+logic change, and don't commit timestamp-only churn
+(`git checkout -- tests/parity/fixtures`).
+
+`CLAUDE_IMPLEMENTATION_GUIDE.md` is the original build-out brief for the
+hosted simulator (product mission, what it must never do, the required
+disclaimer). Read it for product intent. Its Netlify project-creation and
+deploy steps are not standing instructions: don't create or change a Netlify
+project unless the owner asks.
+
+## Verify a change
+
+Run both engines' checks (about 30 seconds after install). There is no CI
+workflow and Netlify only runs `npm ci && npm run build` in `web/`, so
+nothing else runs the Python tests, lint or parity checks for you.
+
+```bash
+pip install -r requirements-dev.txt     # Python 3.11 verified
+python -m pytest                        # tests/python, incl. parity fixtures
+npm --prefix web ci
+npm --prefix web run lint && npm --prefix web run typecheck \
+  && npm --prefix web run test && npm --prefix web run build
+npm --prefix web run test:e2e           # Playwright; serves web/dist, so build first
+```
+
+In a Claude Code cloud session, e2e needs the portfolio guide's Chromium
+override (Playwright's own browser isn't installed), and a plain `pip install`
+fails on the image's Debian-packaged PyYAML ("RECORD file not found"); the
+session-start hook installs with `--ignore-installed` for that reason.
+
+The root `.gitignore` anchors generated data to `/data/*`. An unanchored
+`data/` once also matched `web/src/data/` and kept `csv.ts` out of git, which
+broke clean checkouts: anchor root-only ignore rules, and check
+`git status --ignored` when a new file doesn't show up.
 
 ## Commands
 
@@ -69,6 +107,20 @@ trader writes. Strategy/risk config lives in `strategy.yaml`; the engine
 validates that allocations sum within bankroll and entry-ladder budgets sum
 within each asset's allocation — preserve those validations if you touch
 config loading.
+
+## Claude Code setup
+
+- `.claude/settings.json` allows `pytest`/`python -m pytest`, the fixture
+  generator, and the web `lint`, `typecheck`, `test*` and `build` scripts
+  (`npm --prefix web run ...` or `npm run ...` inside `web/`) without a
+  prompt. It denies reading `.env`, `.env.local`, `.env.*.local`,
+  `.streamlit/secrets.toml` and key files (`*.pem`, `*.key`).
+- `.claude/hooks/session-start.sh` runs in cloud sessions: `pip install -r
+  requirements-dev.txt` when the requirements files changed since the last
+  install (hash in the git-ignored `.cache/`) or the test dependencies are
+  missing, and `npm ci` in `web/` when `node_modules` is missing or older
+  than the lockfile.
+- Skills: `/verify` runs both engines' checks and explains failures.
 
 ## Non-goals
 

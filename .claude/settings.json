@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(pytest*)",
+      "Bash(python -m pytest*)",
+      "Bash(python tests/parity/generate_fixtures.py)",
+      "Bash(npm --prefix web run lint)",
+      "Bash(npm --prefix web run typecheck)",
+      "Bash(npm --prefix web run test*)",
+      "Bash(npm --prefix web run build)",
+      "Bash(npm run lint)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run test*)",
+      "Bash(npm run build)",
+      "Bash(npx vitest run *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.*.local)",
+      "Read(./web/.env)",
+      "Read(./web/.env.local)",
+      "Read(./.streamlit/secrets.toml)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Bash(cat .env)",
+      "Bash(cat ./.env)",
+      "Bash(cat .streamlit/secrets.toml)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
