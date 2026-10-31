@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const ROUTES = ["/", "/simulator", "/runs", "/compare", "/methodology", "/privacy"];
+const ROUTES = ["/", "/simulator", "/runs", "/compare", "/methodology", "/privacy", "/support"];
 
 for (const route of ROUTES) {
   test(`route ${route} loads without console errors`, async ({ page }) => {
@@ -21,6 +21,18 @@ test("footer credits Reints Labs and links to reintslabs.com", async ({ page }) 
   await page.goto("/");
   const footerLink = page.locator("footer a[href='https://reintslabs.com']").first();
   await expect(footerLink).toBeVisible();
+});
+
+test("footer links to the support page, which gives the support email", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: "Support" }).click();
+  await expect(page).toHaveURL(/\/support$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Support" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "sales@reintslabs.com" })).toHaveAttribute(
+    "href",
+    "mailto:sales@reintslabs.com?subject=QuantumYoloEngine%20support",
+  );
+  await expect(page.getByRole("link", { name: "Privacy" }).first()).toBeVisible();
 });
 
 test("disclaimer banner is present on every route", async ({ page }) => {
