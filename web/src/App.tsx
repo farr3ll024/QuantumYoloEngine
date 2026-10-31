@@ -8,6 +8,7 @@ const Runs = lazy(() => import("./routes/Runs"));
 const Compare = lazy(() => import("./routes/Compare"));
 const Methodology = lazy(() => import("./routes/Methodology"));
 const Privacy = lazy(() => import("./routes/Privacy"));
+const Support = lazy(() => import("./routes/Support"));
 const NotFound = lazy(() => import("./routes/NotFound"));
 
 function RouteFallback() {
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/compare" element={<Compare />} />
           <Route path="/methodology" element={<Methodology />} />
           <Route path="/privacy" element={<Privacy />} />
+          <Route path="/support" element={<Support />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
